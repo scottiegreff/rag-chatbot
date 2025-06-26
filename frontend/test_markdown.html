@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Markdown List Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/markdown-it@12/dist/markdown-it.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        .raw-markdown {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 3px;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+
+        .rendered-content {
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin-top: 10px;
+            background-color: white;
+        }
+
+        .message-content ul,
+        .message-content ol {
+            margin-left: 1.5em;
+            margin-bottom: 1em;
+        }
+
+        .message-content li {
+            margin-bottom: 0.5em;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Markdown List Rendering Test</h1>
+
+    <div class="test-section">
+        <h2>Test 1: Simple Unordered List</h2>
+        <div class="raw-markdown">- Item 1
+            - Item 2
+            - Item 3</div>
+        <div class="rendered-content message-content" id="test1"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 2: Ordered List</h2>
+        <div class="raw-markdown">1. First item
+            2. Second item
+            3. Third item</div>
+        <div class="rendered-content message-content" id="test2"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 3: Mixed Content with List</h2>
+        <div class="raw-markdown">Here is a list of items:
+
+            - Apple
+            - Banana
+            - Orange
+
+            And some text after the list.</div>
+        <div class="rendered-content message-content" id="test3"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 4: Nested List</h2>
+        <div class="raw-markdown">- Main item 1
+            - Sub item 1.1
+            - Sub item 1.2
+            - Main item 2
+            - Sub item 2.1</div>
+        <div class="rendered-content message-content" id="test4"></div>
+    </div>
+
+    <script>
+        // Initialize markdown-it with the same configuration as the chat
+        const md = window.markdownit({
+            html: false,
+            breaks: true,
+            linkify: true
+        });
+
+        // Test data
+        const tests = [
+            {
+                id: 'test1',
+                markdown: '- Item 1\n- Item 2\n- Item 3'
+            },
+            {
+                id: 'test2',
+                markdown: '1. First item\n2. Second item\n3. Third item'
+            },
+            {
+                id: 'test3',
+                markdown: 'Here is a list of items:\n\n- Apple\n- Banana\n- Orange\n\nAnd some text after the list.'
+            },
+            {
+                id: 'test4',
+                markdown: '- Main item 1\n  - Sub item 1.1\n  - Sub item 1.2\n- Main item 2\n  - Sub item 2.1'
+            }
+        ];
+
+        // Render each test
+        tests.forEach(test => {
+            const element = document.getElementById(test.id);
+            const rendered = md.render(test.markdown);
+            element.innerHTML = rendered;
+            console.log(`Test ${test.id}:`, rendered);
+        });
+
+        // Test the exact configuration from chat.js
+        console.log('Markdown-it configuration:', {
+            html: false,
+            breaks: true,
+            linkify: true
+        });
+    </script>
+</body>
+
+</html>

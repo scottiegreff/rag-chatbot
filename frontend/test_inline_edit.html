@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inline Edit Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        .success {
+            background-color: #d4edda;
+            border-color: #c3e6cb;
+        }
+
+        .error {
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+        }
+
+        button {
+            padding: 10px 15px;
+            margin: 5px;
+            cursor: pointer;
+        }
+
+        #output {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+        }
+
+        /* Copy the relevant CSS from style.css */
+        .session-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 12px;
+            margin: 10px 0;
+            border-radius: 6px;
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            cursor: pointer;
+            transition: background-color 0.2s, border-color 0.2s;
+            position: relative;
+        }
+
+        .session-title {
+            flex: 1;
+            font-size: 12px;
+            font-weight: 400;
+            margin-right: 6px;
+        }
+
+        .session-title-edit {
+            flex: 1;
+            font-size: 12px;
+            font-weight: 400;
+            border: 1px solid #007bff;
+            border-radius: 4px;
+            padding: 4px 6px;
+            margin-right: 6px;
+            background-color: white;
+            color: #333;
+            outline: none;
+            font-family: inherit;
+        }
+
+        .session-actions {
+            display: flex;
+            gap: 4px;
+        }
+
+        .session-action-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+            font-size: 12px;
+            color: inherit;
+            transition: background-color 0.2s;
+        }
+
+        .session-action-btn:hover {
+            background-color: rgba(0, 0, 0, 0.1);
+        }
+
+        .session-action-btn.save-btn {
+            background-color: #28a745;
+            border-color: #28a745;
+        }
+
+        .session-action-btn.cancel-btn {
+            background-color: #6c757d;
+            border-color: #6c757d;
+        }
+
+        .icon-svg {
+            width: 16px;
+            height: 16px;
+            vertical-align: middle;
+            pointer-events: none;
+            filter: brightness(0);
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Inline Edit Test</h1>
+
+    <div class="test-section">
+        <h3>Test Session Item</h3>
+        <div id="test-session-item" class="session-item">
+            <span class="session-title" data-session-id="test-session">Test Session Title</span>
+            <input type="text" class="session-title-edit" data-session-id="test-session" value="Test Session Title"
+                style="display: none;">
+            <div class="session-actions">
+                <button class="session-action-btn edit-btn" data-session-id="test-session" title="Edit title">
+                    <img src="/static/static/icons/edit.svg" alt="Edit" class="icon-svg" />
+                </button>
+                <button class="session-action-btn save-btn" data-session-id="test-session" title="Save title"
+                    style="display: none;">
+                    <img src="/static/static/icons/save.svg" alt="Save" class="icon-svg" />
+                </button>
+                <button class="session-action-btn cancel-btn" data-session-id="test-session" title="Cancel edit"
+                    style="display: none;">
+                    <img src="/static/static/icons/cancel.svg" alt="Cancel" class="icon-svg" />
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h3>Test Controls</h3>
+        <button onclick="testStartEdit()">Start Edit</button>
+        <button onclick="testSaveEdit()">Save Edit</button>
+        <button onclick="testCancelEdit()">Cancel Edit</button>
+        <button onclick="testReset()">Reset</button>
+    </div>
+
+    <div id="output"></div>
+
+    <script>
+        let isEditingSession = false;
+
+        function log(message) {
+            const output = document.getElementById('output');
+            output.innerHTML += '<div>' + new Date().toLocaleTimeString() + ': ' + message + '</div>';
+        }
+
+        function testStartEdit() {
+            log('Starting edit...');
+            startInlineEdit('test-session');
+        }
+
+        function testSaveEdit() {
+            log('Saving edit...');
+            saveInlineEdit('test-session');
+        }
+
+        function testCancelEdit() {
+            log('Canceling edit...');
+            cancelInlineEdit('test-session');
+        }
+
+        function testReset() {
+            log('Resetting...');
+            const titleSpan = document.querySelector('.session-title');
+            const titleInput = document.querySelector('.session-title-edit');
+            titleSpan.textContent = 'Test Session Title';
+            titleInput.value = 'Test Session Title';
+            exitEditMode(document.querySelector('.session-item'));
+        }
+
+        // Copy the inline editing functions from chat.js
+        function startInlineEdit(sessionId) {
+            console.log('Starting inline edit for session:', sessionId);
+            isEditingSession = true;
+
+            const sessionItem = document.querySelector(`[data-session-id="${sessionId}"]`).closest('.session-item');
+            const titleSpan = sessionItem.querySelector('.session-title');
+            const titleInput = sessionItem.querySelector('.session-title-edit');
+            const editBtn = sessionItem.querySelector('.edit-btn');
+            const saveBtn = sessionItem.querySelector('.save-btn');
+            const cancelBtn = sessionItem.querySelector('.cancel-btn');
+
+            // Store original value for cancel
+            titleInput.dataset.originalValue = titleInput.value;
+
+            // Show input, hide span
+            titleSpan.style.display = 'none';
+            titleInput.style.display = 'block';
+
+            // Show save/cancel buttons, hide edit button
+            editBtn.style.display = 'none';
+            saveBtn.style.display = 'block';
+            cancelBtn.style.display = 'block';
+
+            // Focus and select all text
+            titleInput.focus();
+            titleInput.select();
+
+            log('Edit mode started');
+        }
+
+        async function saveInlineEdit(sessionId) {
+            console.log('Saving inline edit for session:', sessionId);
+
+            const sessionItem = document.querySelector(`[data-session-id="${sessionId}"]`).closest('.session-item');
+            const titleSpan = sessionItem.querySelector('.session-title');
+            const titleInput = sessionItem.querySelector('.session-title-edit');
+
+            const newTitle = titleInput.value.trim();
+            const originalTitle = titleSpan.textContent.trim();
+
+            log('New title: ' + newTitle + ', Original title: ' + originalTitle);
+
+            if (!newTitle) {
+                log('Empty title, reverting');
+                cancelInlineEdit(sessionId);
+                return;
+            }
+
+            if (newTitle === originalTitle) {
+                log('No change, exiting edit mode');
+                cancelInlineEdit(sessionId);
+                return;
+            }
+
+            // Update the display immediately for testing
+            titleSpan.textContent = newTitle;
+            titleInput.value = newTitle;
+
+            // Exit edit mode
+            exitEditMode(sessionItem);
+
+            log('Title saved: ' + newTitle);
+        }
+
+        function cancelInlineEdit(sessionId) {
+            const sessionItem = document.querySelector(`[data-session-id="${sessionId}"]`).closest('.session-item');
+            const titleSpan = sessionItem.querySelector('.session-title');
+            const titleInput = sessionItem.querySelector('.session-title-edit');
+
+            // Restore original value
+            if (titleInput.dataset.originalValue) {
+                titleInput.value = titleInput.dataset.originalValue;
+            }
+
+            exitEditMode(sessionItem);
+            log('Edit canceled');
+        }
+
+        function exitEditMode(sessionItem) {
+            console.log('Exiting edit mode');
+            isEditingSession = false;
+
+            const titleSpan = sessionItem.querySelector('.session-title');
+            const titleInput = sessionItem.querySelector('.session-title-edit');
+            const editBtn = sessionItem.querySelector('.edit-btn');
+            const saveBtn = sessionItem.querySelector('.save-btn');
+            const cancelBtn = sessionItem.querySelector('.cancel-btn');
+
+            // Hide input, show span
+            titleSpan.style.display = 'block';
+            titleInput.style.display = 'none';
+
+            // Show edit button, hide save/cancel buttons
+            editBtn.style.display = 'block';
+            saveBtn.style.display = 'none';
+            cancelBtn.style.display = 'none';
+
+            // Clear original value
+            delete titleInput.dataset.originalValue;
+
+            log('Edit mode exited');
+        }
+
+        // Add event listeners
+        document.addEventListener('DOMContentLoaded', () => {
+            const editBtn = document.querySelector('.edit-btn');
+            const saveBtn = document.querySelector('.save-btn');
+            const cancelBtn = document.querySelector('.cancel-btn');
+            const titleInput = document.querySelector('.session-title-edit');
+
+            editBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                log('Edit button clicked');
+                startInlineEdit('test-session');
+            });
+
+            saveBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                log('Save button clicked');
+                saveInlineEdit('test-session');
+            });
+
+            cancelBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                log('Cancel button clicked');
+                cancelInlineEdit('test-session');
+            });
+
+            titleInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    log('Enter key pressed');
+                    saveInlineEdit('test-session');
+                } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    log('Escape key pressed');
+                    cancelInlineEdit('test-session');
+                }
+            });
+
+            log('Test page loaded');
+        });
+    </script>
+</body>
+
+</html>

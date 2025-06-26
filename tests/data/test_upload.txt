@@ -1,0 +1,10 @@
+This is a test document for frontend upload functionality.
+
+The purpose of this document is to test whether the frontend file upload interface correctly:
+1. Accepts .txt files
+2. Shows upload progress
+3. Sends the file to the backend API
+4. Processes it into the vector database
+5. Makes the content available for questions
+
+If this works correctly, you should be able to ask questions about this document after uploading it through the web interface. 

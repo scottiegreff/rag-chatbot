@@ -1,0 +1,38 @@
+# Core FastAPI dependencies
+fastapi>=0.68.0
+uvicorn>=0.15.0
+sqlalchemy>=1.4.23
+pydantic>=1.8.2
+python-dotenv>=0.19.0
+
+# HTTP and web scraping
+beautifulsoup4>=4.9.3
+requests>=2.25.1
+
+# Database
+psycopg2-binary>=2.9.1
+
+# LLM and AI dependencies
+llama-cpp-python==0.2.11
+weaviate-client>=3.25.0
+sentence-transformers==2.2.2
+huggingface_hub==0.10.1
+
+# LangChain for SQL Agent
+langchain>=0.1.0
+langchain-community>=0.0.10
+langchain-core>=0.1.0
+
+# Document processing
+PyPDF2==3.0.1
+python-docx==0.8.11
+openpyxl>=3.0.0
+
+# Additional utilities
+python-multipart>=0.0.5
+aiofiles>=0.7.0
+
+# Fix NumPy compatibility
+numpy<2.0
+pandas<2.0
+scikit-learn<2.0 

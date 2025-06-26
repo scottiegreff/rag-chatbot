@@ -1,0 +1,14 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+
+# Coding Procedures
+
+- ALWAYS look at other functions and other parts of the code to see how the new code suggested will affect old code.
+- Focus on code relavent to the task
+- Do not touch code that is unrelated to the task
+- Write test for all major functionality
+- Avoid making changes to the pattern and architechture of how a feature works, unless specially asked to
+- Always think about what other areas of the methods and areas of the code might be affected by code changes. 

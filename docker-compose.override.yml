@@ -1,0 +1,29 @@
+# Development override for docker-compose.yml
+# This file is automatically loaded by docker-compose for development
+
+services:
+  backend:
+    environment:
+      DEBUG: "true"
+      # Enable hot reload for development
+    command: ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    volumes:
+      # Mount source code for live reloading
+      - ./backend:/app/backend
+      - ./models:/app/models:ro
+    # Remove restart policy for development
+    restart: "no"
+    # Remove resource limits for development
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+          cpus: 4.0
+        reservations:
+          memory: 4G
+          cpus: 2.0
+
+  frontend:
+    # Disable frontend service in development (backend serves it)
+    profiles:
+      - "disabled" 

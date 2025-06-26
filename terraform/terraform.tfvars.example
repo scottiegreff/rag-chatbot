@@ -1,0 +1,29 @@
+# FCI Chatbot Terraform Variables
+# Copy this file to terraform.tfvars and fill in your personal information
+
+# AWS Configuration
+aws_region = "ca-central-1"  # Calgary, Canada
+
+# Project Configuration
+project_name = "fci-chatbot"
+environment  = "production"
+
+# Network Configuration
+vpc_cidr = "10.0.0.0/16"
+availability_zones = ["ca-central-1a", "ca-central-1b"]
+
+# Instance Configuration
+instance_type = "t3.medium"  # 2 vCPU, 4 GB RAM
+key_pair_name = "fci-chatbot-key"
+
+# Personal Information (Optional - for resource naming)
+# owner_name = "Your Name"
+# contact_email = "your.email@example.com"
+# company_name = "Your Company"
+
+# Database Configuration (if using RDS)
+# db_password = "your-secure-database-password"
+
+# Application Configuration
+# domain_name = "your-domain.com"  # If you have a domain
+# ssl_certificate_arn = "arn:aws:acm:ca-central-1:123456789012:certificate/xxx"  # If you have an SSL certificate 

@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Toggle Fix Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+
+        .test-info {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .success {
+            color: green;
+            font-weight: bold;
+        }
+
+        .error {
+            color: red;
+            font-weight: bold;
+        }
+
+        .info {
+            color: blue;
+        }
+
+        /* Chat widget styles */
+        #chat-widget {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+
+        #chat-toggle-btn {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: #007bff;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            transition: all 0.3s ease;
+        }
+
+        #chat-toggle-btn:hover {
+            transform: scale(1.1);
+        }
+
+        #chat-toggle-btn img {
+            width: 24px;
+            height: 24px;
+            filter: brightness(0) invert(1);
+        }
+
+        #chat-interface {
+            position: absolute;
+            bottom: 80px;
+            right: 0;
+            width: 350px;
+            height: 500px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            display: none;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        #chat-interface.open {
+            display: flex;
+        }
+
+        .chat-header {
+            background: #007bff;
+            color: white;
+            padding: 15px;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            background: #f8f9fa;
+        }
+
+        .chat-input {
+            padding: 15px;
+            border-top: 1px solid #dee2e6;
+            background: white;
+        }
+
+        #chat-form {
+            display: flex;
+            gap: 10px;
+        }
+
+        #user-input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            outline: none;
+        }
+
+        #chat-form button {
+            padding: 10px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        #chat-form button:hover {
+            background: #0056b3;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="test-info">
+        <h1>Chat Toggle Fix Test</h1>
+        <p>This page tests the chat toggle button functionality with the updated JavaScript.</p>
+        <div id="test-results"></div>
+    </div>
+
+    <!-- Chat Widget -->
+    <div id="chat-widget">
+        <button class="chat-toggle-btn" id="chat-toggle-btn" title="Toggle Chat">
+            <img src="/static/icons/chat.svg" alt="Chat" class="chat-toggle-icon">
+        </button>
+        <div id="chat-interface">
+            <div class="chat-header">Chat Assistant</div>
+            <div id="chat-messages" class="chat-messages">
+                <div class="message system">Hello! I'm here to help. Click the toggle button to open/close this chat.
+                </div>
+            </div>
+            <div class="chat-input">
+                <form id="chat-form">
+                    <input type="text" id="user-input" placeholder="Type your message..." autocomplete="off">
+                    <button type="submit">Send</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Test results
+        const testResults = document.getElementById('test-results');
+
+        function logTest(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            testResults.innerHTML += `<div class="${type}">[${timestamp}] ${message}</div>`;
+            console.log(`[${timestamp}] ${message}`);
+        }
+
+        // DOM elements
+        let chatForm = null;
+        let userInput = null;
+        let chatMessages = null;
+        let chatWidget = null;
+        let chatToggleBtn = null;
+        let chatInterface = null;
+
+        // Chat widget state
+        let isChatOpen = false;
+
+        // Initialize DOM elements
+        function initializeDOMElements() {
+            logTest('Initializing DOM elements...');
+
+            chatForm = document.getElementById('chat-form');
+            userInput = document.getElementById('user-input');
+            chatMessages = document.getElementById('chat-messages');
+            chatWidget = document.getElementById('chat-widget');
+            chatToggleBtn = document.getElementById('chat-toggle-btn');
+            chatInterface = document.getElementById('chat-interface');
+
+            // Log which elements were found
+            const elements = {
+                'chat-form': chatForm,
+                'user-input': userInput,
+                'chat-messages': chatMessages,
+                'chat-widget': chatWidget,
+                'chat-toggle-btn': chatToggleBtn,
+                'chat-interface': chatInterface
+            };
+
+            logTest('DOM element initialization results:');
+            Object.entries(elements).forEach(([id, element]) => {
+                if (element) {
+                    logTest(`✅ ${id}: Found`, 'success');
+                } else {
+                    logTest(`❌ ${id}: Not found`, 'error');
+                }
+            });
+        }
+
+        // Chat widget toggle function
+        function toggleChatWidget() {
+            logTest('toggleChatWidget called');
+            isChatOpen = !isChatOpen;
+
+            if (isChatOpen) {
+                logTest('Opening chat interface');
+                if (chatInterface) {
+                    chatInterface.classList.add('open');
+                }
+                if (chatToggleBtn) {
+                    chatToggleBtn.style.transform = 'scale(0.8)';
+                    chatToggleBtn.style.opacity = '0.7';
+                }
+
+                setTimeout(() => {
+                    if (userInput) {
+                        userInput.focus();
+                        logTest('Focused on user input');
+                    }
+                }, 300);
+            } else {
+                logTest('Closing chat interface');
+                if (chatInterface) {
+                    chatInterface.classList.remove('open');
+                }
+                if (chatToggleBtn) {
+                    chatToggleBtn.style.transform = 'scale(1)';
+                    chatToggleBtn.style.opacity = '1';
+                }
+            }
+        }
+
+        // Handle chat form submission
+        function handleChatSubmit(event) {
+            event.preventDefault();
+
+            const message = userInput.value.trim();
+            if (!message) return;
+
+            logTest(`User message: ${message}`);
+
+            // Add user message to chat
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message user';
+            messageDiv.textContent = message;
+            chatMessages.appendChild(messageDiv);
+
+            // Clear input
+            userInput.value = '';
+
+            // Add bot response
+            setTimeout(() => {
+                const responseDiv = document.createElement('div');
+                responseDiv.className = 'message assistant';
+                responseDiv.textContent = `You said: "${message}". This is a test response.`;
+                chatMessages.appendChild(responseDiv);
+
+                // Scroll to bottom
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }, 500);
+        }
+
+        // Setup event listeners
+        function setupEventListeners() {
+            logTest('Setting up event listeners...');
+
+            // Initialize DOM elements first
+            initializeDOMElements();
+
+            // Chat form submission
+            if (chatForm) {
+                chatForm.addEventListener('submit', handleChatSubmit);
+                logTest('Chat form event listener added', 'success');
+            } else {
+                logTest('Chat form not found - cannot add event listener', 'error');
+            }
+
+            // Chat toggle
+            if (chatToggleBtn) {
+                chatToggleBtn.addEventListener('click', toggleChatWidget);
+                logTest('Chat toggle button event listener added', 'success');
+            } else {
+                logTest('Chat toggle button not found - cannot add event listener', 'error');
+            }
+
+            // Close chat when clicking outside
+            document.addEventListener('click', (e) => {
+                if (isChatOpen && chatWidget && !chatWidget.contains(e.target)) {
+                    logTest('Click outside detected - closing chat');
+                    toggleChatWidget();
+                }
+            });
+
+            logTest('Event listeners setup complete');
+        }
+
+        // Initialize when DOM is loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            logTest('DOMContentLoaded fired - initializing...');
+            setupEventListeners();
+        });
+
+        // Test instructions
+        logTest('Test Instructions:', 'info');
+        logTest('1. Click the blue chat button in the bottom right', 'info');
+        logTest('2. The chat interface should open', 'info');
+        logTest('3. Click the button again to close it', 'info');
+        logTest('4. Click outside the chat widget to close it', 'info');
+        logTest('5. Try typing a message and pressing Enter', 'info');
+    </script>
+</body>
+
+</html>

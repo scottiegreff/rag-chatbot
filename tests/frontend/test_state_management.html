@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>State Management Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .state-display {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            margin: 10px 0;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin: 10px 0;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background: #007bff;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #0056b3;
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #1e7e34;
+        }
+
+        .btn-warning {
+            background: #ffc107;
+            color: black;
+        }
+
+        .btn-warning:hover {
+            background: #e0a800;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c82333;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-true {
+            background: #28a745;
+        }
+
+        .status-false {
+            background: #dc3545;
+        }
+
+        .modal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            z-index: 1000;
+            display: none;
+        }
+
+        .modal.show {
+            display: block;
+        }
+
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.3);
+            z-index: 999;
+            display: none;
+        }
+
+        .overlay.show {
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>State Management System Test</h1>
+
+    <div class="test-section">
+        <h2>Current State</h2>
+        <div id="state-display" class="state-display">Loading...</div>
+    </div>
+
+    <div class="test-section">
+        <h2>UI State Controls</h2>
+        <div class="button-group">
+            <button class="btn-primary" onclick="toggleChat()">Toggle Chat</button>
+            <button class="btn-primary" onclick="toggleSidebar()">Toggle Sidebar</button>
+            <button class="btn-primary" onclick="toggleModal()">Toggle Upload Modal</button>
+            <button class="btn-warning" onclick="toggleStreaming()">Toggle Streaming</button>
+            <button class="btn-warning" onclick="toggleUploading()">Toggle Uploading</button>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>State Indicators</h2>
+        <div id="state-indicators"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Benefits of State Management</h2>
+        <ul>
+            <li><strong>Centralized State:</strong> All UI states in one place</li>
+            <li><strong>Predictable Updates:</strong> State changes trigger automatic UI updates</li>
+            <li><strong>Easy Debugging:</strong> Single source of truth for all states</li>
+            <li><strong>Scalable:</strong> Easy to add new states and modals</li>
+            <li><strong>Maintainable:</strong> No more scattered DOM manipulations</li>
+            <li><strong>Type Safe:</strong> Clear state structure and getters/setters</li>
+        </ul>
+    </div>
+
+    <!-- Test Modal -->
+    <div id="overlay" class="overlay"></div>
+    <div id="test-modal" class="modal">
+        <h3>Upload Modal</h3>
+        <p>This is a test modal that demonstrates the state management system.</p>
+        <button class="btn-primary" onclick="toggleModal()">Close</button>
+    </div>
+
+    <script>
+        // Simplified State Management System (similar to what we implemented)
+        const AppState = {
+            ui: {
+                chatOpen: false,
+                sidebarOpen: false,
+                modalOpen: false,
+                streaming: false,
+                uploading: false
+            },
+
+            updateUI(newState) {
+                this.ui = { ...this.ui, ...newState };
+                this.renderUI();
+                this.updateDisplay();
+            },
+
+            renderUI() {
+                // Chat state
+                const chatBtn = document.querySelector('button[onclick="toggleChat()"]');
+                if (chatBtn) {
+                    chatBtn.textContent = this.ui.chatOpen ? 'Close Chat' : 'Open Chat';
+                    chatBtn.style.background = this.ui.chatOpen ? '#28a745' : '#007bff';
+                }
+
+                // Sidebar state
+                const sidebarBtn = document.querySelector('button[onclick="toggleSidebar()"]');
+                if (sidebarBtn) {
+                    sidebarBtn.textContent = this.ui.sidebarOpen ? 'Close Sidebar' : 'Open Sidebar';
+                    sidebarBtn.style.background = this.ui.sidebarOpen ? '#28a745' : '#007bff';
+                }
+
+                // Modal state
+                const modal = document.getElementById('test-modal');
+                const overlay = document.getElementById('overlay');
+                if (this.ui.modalOpen) {
+                    modal.classList.add('show');
+                    overlay.classList.add('show');
+                } else {
+                    modal.classList.remove('show');
+                    overlay.classList.remove('show');
+                }
+
+                // Streaming state
+                const streamingBtn = document.querySelector('button[onclick="toggleStreaming()"]');
+                if (streamingBtn) {
+                    streamingBtn.textContent = this.ui.streaming ? 'Stop Streaming' : 'Start Streaming';
+                    streamingBtn.style.background = this.ui.streaming ? '#dc3545' : '#ffc107';
+                }
+
+                // Uploading state
+                const uploadingBtn = document.querySelector('button[onclick="toggleUploading()"]');
+                if (uploadingBtn) {
+                    uploadingBtn.textContent = this.ui.uploading ? 'Stop Upload' : 'Start Upload';
+                    uploadingBtn.style.background = this.ui.uploading ? '#dc3545' : '#ffc107';
+                }
+            },
+
+            updateDisplay() {
+                const display = document.getElementById('state-display');
+                display.textContent = JSON.stringify(this.ui, null, 2);
+
+                // Update indicators
+                const indicators = document.getElementById('state-indicators');
+                indicators.innerHTML = Object.entries(this.ui)
+                    .map(([key, value]) => `
+                        <div>
+                            <span class="status-indicator status-${value}"></span>
+                            ${key}: ${value}
+                        </div>
+                    `).join('');
+            },
+
+            // Getters
+            isChatOpen() { return this.ui.chatOpen; },
+            isModalOpen() { return this.ui.modalOpen; },
+            isStreaming() { return this.ui.streaming; },
+            isUploading() { return this.ui.uploading; },
+
+            // Setters
+            setChatOpen(open) { this.updateUI({ chatOpen: open }); },
+            setModalOpen(open) { this.updateUI({ modalOpen: open }); },
+            setStreaming(streaming) { this.updateUI({ streaming }); },
+            setUploading(uploading) { this.updateUI({ uploading }); },
+            setSidebarOpen(open) { this.updateUI({ sidebarOpen: open }); }
+        };
+
+        // Control functions
+        function toggleChat() {
+            AppState.setChatOpen(!AppState.isChatOpen());
+        }
+
+        function toggleSidebar() {
+            AppState.setSidebarOpen(!AppState.ui.sidebarOpen);
+        }
+
+        function toggleModal() {
+            AppState.setModalOpen(!AppState.isModalOpen());
+        }
+
+        function toggleStreaming() {
+            AppState.setStreaming(!AppState.isStreaming());
+        }
+
+        function toggleUploading() {
+            AppState.setUploading(!AppState.isUploading());
+        }
+
+        // Close modal when clicking overlay
+        document.getElementById('overlay').addEventListener('click', () => {
+            AppState.setModalOpen(false);
+        });
+
+        // Initialize display
+        AppState.updateDisplay();
+
+        // Demo: Auto-update state every 5 seconds to show reactivity
+        setInterval(() => {
+            console.log('Current state:', AppState.ui);
+        }, 5000);
+    </script>
+</body>
+
+</html>

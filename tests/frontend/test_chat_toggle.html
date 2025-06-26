@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Toggle Debug Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+
+        .debug-info {
+            background: #f0f0f0;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+
+        .error {
+            color: red;
+        }
+
+        .success {
+            color: green;
+        }
+
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Chat Toggle Debug Test</h1>
+
+    <div class="debug-info">
+        <h3>DOM Element Check:</h3>
+        <div id="element-check"></div>
+    </div>
+
+    <div class="debug-info">
+        <h3>Event Listener Test:</h3>
+        <button id="test-toggle-btn">Test Toggle Button</button>
+        <div id="event-test"></div>
+    </div>
+
+    <div class="debug-info">
+        <h3>Console Log:</h3>
+        <div id="console-log"></div>
+    </div>
+
+    <script>
+        // Function to log to both console and page
+        function debugLog(message, type = 'info') {
+            console.log(message);
+            const logDiv = document.getElementById('console-log');
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `<div class="${type}">[${timestamp}] ${message}</div>`;
+        }
+
+        // Check if elements exist
+        function checkElements() {
+            const elements = [
+                'chat-widget',
+                'chat-toggle-btn',
+                'chat-interface',
+                'chat-form',
+                'user-input',
+                'chat-messages'
+            ];
+
+            const checkDiv = document.getElementById('element-check');
+            checkDiv.innerHTML = '';
+
+            elements.forEach(id => {
+                const element = document.getElementById(id);
+                if (element) {
+                    checkDiv.innerHTML += `<div class="success">✅ ${id}: Found</div>`;
+                    debugLog(`Element found: ${id}`);
+                } else {
+                    checkDiv.innerHTML += `<div class="error">❌ ${id}: Not found</div>`;
+                    debugLog(`Element NOT found: ${id}`, 'error');
+                }
+            });
+        }
+
+        // Test event listener
+        function testEventListeners() {
+            const testBtn = document.getElementById('test-toggle-btn');
+            const eventDiv = document.getElementById('event-test');
+
+            testBtn.addEventListener('click', () => {
+                eventDiv.innerHTML = '<div class="success">✅ Test button click works!</div>';
+                debugLog('Test button clicked successfully');
+            });
+        }
+
+        // Check elements on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            debugLog('DOMContentLoaded fired');
+            checkElements();
+            testEventListeners();
+
+            // Check again after a short delay
+            setTimeout(() => {
+                debugLog('Checking elements again after delay...');
+                checkElements();
+            }, 1000);
+        });
+
+        // Also check when window loads
+        window.addEventListener('load', () => {
+            debugLog('Window load fired');
+            checkElements();
+        });
+    </script>
+</body>
+
+</html>
