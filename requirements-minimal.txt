@@ -1,4 +1,4 @@
-# Minimal production requirements for smaller image size
+# Ultra-minimal production requirements for smaller image size
 # Core FastAPI dependencies
 fastapi>=0.68.0
 uvicorn>=0.15.0
@@ -29,6 +29,5 @@ langchain-core>=0.1.0
 python-multipart>=0.0.5
 aiofiles>=0.7.0
 
-# Optimized NumPy and pandas
-numpy<2.0
-pandas<2.0 
+# Optimized NumPy (pandas temporarily removed for space)
+numpy<2.0 
