@@ -81,7 +81,7 @@ yarn-error.log*
 *.temp
 
 # Additional exclusions for smaller build context
-frontend/  # Exclude frontend from backend build
+# frontend/  # Keep frontend for backend to serve
 terraform/
 deployment/
 *.sh
