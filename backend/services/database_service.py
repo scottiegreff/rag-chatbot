@@ -188,52 +188,18 @@ class DatabaseService:
                 'execution_time': time.time() - start_time
             }
     
-    def _generate_summary(self, df: pd.DataFrame) -> Dict[str, Any]:
+    def _generate_summary(self, df) -> Dict[str, Any]:
         """
         Generate summary statistics for query results.
         
         Args:
-            df: Pandas DataFrame with query results
+            df: Data (currently unused in minimal build)
             
         Returns:
             Dictionary with summary statistics
         """
-        summary = {
-            'total_rows': len(df),
-            'total_columns': len(df.columns),
-            'column_types': df.dtypes.to_dict(),
-            'numeric_columns': [],
-            'text_columns': [],
-            'date_columns': []
-        }
-        
-        for col in df.columns:
-            col_type = str(df[col].dtype)
-            
-            if 'int' in col_type or 'float' in col_type:
-                summary['numeric_columns'].append({
-                    'column': col,
-                    'min': float(df[col].min()) if not df[col].isna().all() else None,
-                    'max': float(df[col].max()) if not df[col].isna().all() else None,
-                    'mean': float(df[col].mean()) if not df[col].isna().all() else None,
-                    'count': int(df[col].count())
-                })
-            elif 'datetime' in col_type:
-                summary['date_columns'].append({
-                    'column': col,
-                    'min': str(df[col].min()) if not df[col].isna().all() else None,
-                    'max': str(df[col].max()) if not df[col].isna().all() else None,
-                    'count': int(df[col].count())
-                })
-            else:
-                summary['text_columns'].append({
-                    'column': col,
-                    'unique_values': int(df[col].nunique()),
-                    'most_common': df[col].mode().iloc[0] if not df[col].mode().empty else None,
-                    'count': int(df[col].count())
-                })
-        
-        return summary
+        # This method is kept for compatibility but not used in minimal build
+        return {'total_rows': 0, 'total_columns': 0, 'note': 'pandas summary disabled'}
     
     def validate_query(self, query: str) -> Dict[str, Any]:
         """
