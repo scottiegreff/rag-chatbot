@@ -1,12 +1,13 @@
 import sqlite3
 import psycopg2
 import mysql.connector
-import pandas as pd
+# import pandas as pd  # Temporarily disabled for minimal build
 from typing import Dict, List, Any, Optional, Union
 import logging
 from sqlalchemy import create_engine, text, inspect
 from sqlalchemy.exc import SQLAlchemyError
 import json
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -136,7 +137,7 @@ class DatabaseService:
             Dictionary containing results, metadata, and execution info
         """
         try:
-            start_time = pd.Timestamp.now()
+            start_time = time.time()
             
             # Execute query
             with self.engine.connect() as connection:
@@ -155,9 +156,8 @@ class DatabaseService:
                     for row in rows:
                         data.append(dict(zip(columns, row)))
                     
-                    # Create summary statistics
-                    df = pd.DataFrame(data)
-                    summary = self._generate_summary(df)
+                    # Create summary statistics (simplified without pandas)
+                    summary = self._generate_summary_simple(data)
                     
                     result_data = {
                         'success': True,
@@ -165,7 +165,7 @@ class DatabaseService:
                         'columns': list(columns),
                         'row_count': len(data),
                         'summary': summary,
-                        'execution_time': (pd.Timestamp.now() - start_time).total_seconds()
+                        'execution_time': time.time() - start_time
                     }
                 else:
                     # For INSERT, UPDATE, DELETE operations
@@ -174,7 +174,7 @@ class DatabaseService:
                         'data': [],
                         'row_count': result.rowcount,
                         'message': f"Query executed successfully. {result.rowcount} rows affected.",
-                        'execution_time': (pd.Timestamp.now() - start_time).total_seconds()
+                        'execution_time': time.time() - start_time
                     }
             
             logger.info(f"✅ Query executed successfully in {result_data['execution_time']:.3f}s")
@@ -185,7 +185,7 @@ class DatabaseService:
             return {
                 'success': False,
                 'error': str(e),
-                'execution_time': (pd.Timestamp.now() - start_time).total_seconds()
+                'execution_time': time.time() - start_time
             }
     
     def _generate_summary(self, df: pd.DataFrame) -> Dict[str, Any]:
@@ -317,4 +317,14 @@ class DatabaseService:
         """Close database connection."""
         if self.engine:
             self.engine.dispose()
-            logger.info("🔌 Database connection closed") 
+            logger.info("🔌 Database connection closed")
+    
+    def _generate_summary_simple(self, data):
+        # Simple summary for minimal build (no pandas)
+        if not data:
+            return {'total_rows': 0, 'total_columns': 0}
+        return {
+            'total_rows': len(data),
+            'total_columns': len(data[0]) if data else 0,
+            'columns': list(data[0].keys()) if data else []
+        } 
