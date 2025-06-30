@@ -447,6 +447,10 @@ async function sendMessageStreaming(message, customSystemInstruction = null) {
             payload.system_instruction = customSystemInstruction;
         }
 
+        // Log before making the request
+        const requestStartTime = performance.now();
+        console.log(`📤 [FRONTEND TIMING] Making request to backend at: ${requestStartTime}ms`);
+
         // Fetch streaming response with abort signal
         const response = await fetch('/api/chat/stream', {
             method: 'POST',
@@ -456,6 +460,10 @@ async function sendMessageStreaming(message, customSystemInstruction = null) {
             body: JSON.stringify(payload),
             signal: signal  // Pass the abort signal
         });
+
+        const requestEndTime = performance.now();
+        const requestDuration = requestEndTime - requestStartTime;
+        console.log(`📤 [FRONTEND TIMING] Request completed in ${requestDuration.toFixed(2)}ms`);
 
         if (!response.ok) {
             throw new Error('Failed to get streaming response');
@@ -490,6 +498,9 @@ async function sendMessageStreaming(message, customSystemInstruction = null) {
             // Special handling for first chunk
             if (isFirstChunk) {
                 isFirstChunk = false;
+                firstChunkTime = performance.now();
+                const firstChunkDuration = firstChunkTime - startTime;
+                console.log(`📥 [FRONTEND TIMING] First chunk received in ${firstChunkDuration.toFixed(2)}ms`);
                 console.log("First chunk:", chunk);
                 
                 if (!chunk.trimStart().startsWith('data:')) {
@@ -519,7 +530,8 @@ async function sendMessageStreaming(message, customSystemInstruction = null) {
                         if (data.delta && !messageStarted) {
                             messageStarted = true;
                             responseStartTime = performance.now();
-                            console.log(`📝 Response started at: ${new Date().toISOString()}`);
+                            const responseStartDuration = responseStartTime - startTime;
+                            console.log(`📝 [FRONTEND TIMING] Response started in ${responseStartDuration.toFixed(2)}ms`);
                             removeTypingIndicator();
                             chatMessages.appendChild(messageDiv);
                         }
@@ -567,10 +579,9 @@ async function sendMessageStreaming(message, customSystemInstruction = null) {
                             const totalTime = endTime - startTime;
                             const responseTime = responseStartTime ? endTime - responseStartTime : 0;
                             
-                            console.log(`✅ Response completed at: ${new Date().toISOString()}`);
-                            console.log(`⏱️  Total time from prompt to completion: ${totalTime.toFixed(2)}ms`);
-                            console.log(`⏱️  Response generation time: ${responseTime.toFixed(2)}ms`);
-                            console.log(`📊 Response length: ${accumulatedContent.length} characters`);
+                            console.log(`✅ [FRONTEND TIMING] Response completed in ${totalTime.toFixed(2)}ms`);
+                            console.log(`⏱️ [FRONTEND TIMING] Response generation time: ${responseTime.toFixed(2)}ms`);
+                            console.log(`📊 [FRONTEND TIMING] Response length: ${accumulatedContent.length} characters`);
                             
                             // Refresh sessions list to update titles
                             await loadSessions();
@@ -1215,6 +1226,10 @@ function initializeDOMElements() {
 function handleChatSubmit(event) {
     event.preventDefault();
     
+    // Start timing from user click
+    const userClickTime = performance.now();
+    console.log(`🚀 [FRONTEND TIMING] User clicked send at: ${userClickTime}ms`);
+    
     // If we're currently streaming, abort the stream
     if (AppState.isStreaming() && currentStreamController) {
         currentStreamController.abort();
@@ -1226,6 +1241,9 @@ function handleChatSubmit(event) {
     
     // Clear input
     userInput.value = '';
+    
+    // Log message being sent
+    console.log(`📤 [FRONTEND TIMING] Sending message: "${message}"`);
     
     // Send message
     sendMessageStreaming(message);

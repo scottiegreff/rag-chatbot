@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import List, Dict, Optional, Any
 from dotenv import load_dotenv
 from datetime import datetime
+import time
 from .search_service import SearchService
 # from backend.services.database_query_service import db_query_service  # Backup - commented out
 from backend.services.langchain_sql_service import langchain_sql_service
@@ -541,9 +542,16 @@ class RAGService:
         Returns:
             Formatted context string combining local and web results
         """
+        context_start_time = time.time()
+        logger.info(f"🔍 [TIMING] Starting context retrieval for query: '{query[:50]}...'")
+        
         try:
             # Get hybrid search results
+            hybrid_start_time = time.time()
             hybrid_results = self.hybrid_search(query, n_local_results=3, n_web_results=2)
+            hybrid_end_time = time.time()
+            hybrid_duration = (hybrid_end_time - hybrid_start_time) * 1000
+            logger.info(f"🔍 [TIMING] Hybrid search completed in {hybrid_duration:.2f}ms")
             
             context_parts = []
             
@@ -570,10 +578,16 @@ class RAGService:
             if summary:
                 context_parts.append(f"\n📝 Summary: {summary}")
             
+            context_end_time = time.time()
+            context_duration = (context_end_time - context_start_time) * 1000
+            logger.info(f"🔍 [TIMING] Context retrieval completed in {context_duration:.2f}ms")
+            
             return "\n".join(context_parts) if context_parts else "No relevant context found."
             
         except Exception as e:
-            logger.error(f"Error getting context for query: {e}")
+            context_end_time = time.time()
+            context_duration = (context_end_time - context_start_time) * 1000
+            logger.error(f"❌ [TIMING] Context retrieval failed after {context_duration:.2f}ms: {e}")
             return f"Error retrieving context: {str(e)}"
 
     def process_database_query(self, query: str) -> Dict[str, Any]:
@@ -587,17 +601,34 @@ class RAGService:
         Returns:
             Dict containing processed results and context
         """
+        db_process_start_time = time.time()
+        logger.info(f"🗄️ [TIMING] Starting database query processing for: '{query[:50]}...'")
+        
         try:
             # First, try to get relevant context from documents
+            context_start_time = time.time()
             context = self.get_context_for_query(query)
+            context_end_time = time.time()
+            context_duration = (context_end_time - context_start_time) * 1000
+            logger.info(f"📄 [TIMING] Document context retrieval completed in {context_duration:.2f}ms")
             
             # Then, try to get any database-specific information
+            db_query_start_time = time.time()
             db_results = None
             try:
                 # db_results = db_query_service.process_query(query)  # Backup - commented out
                 db_results = langchain_sql_service.process_query(query)
+                db_query_end_time = time.time()
+                db_query_duration = (db_query_end_time - db_query_start_time) * 1000
+                logger.info(f"🗄️ [TIMING] Database query completed in {db_query_duration:.2f}ms")
             except Exception as e:
-                logger.warning(f"Database query failed: {e}")
+                db_query_end_time = time.time()
+                db_query_duration = (db_query_end_time - db_query_start_time) * 1000
+                logger.warning(f"❌ [TIMING] Database query failed after {db_query_duration:.2f}ms: {e}")
+            
+            db_process_end_time = time.time()
+            db_process_duration = (db_process_end_time - db_process_start_time) * 1000
+            logger.info(f"🗄️ [TIMING] Database query processing completed in {db_process_duration:.2f}ms")
             
             return {
                 'query': query,
@@ -608,7 +639,9 @@ class RAGService:
             }
             
         except Exception as e:
-            logger.error(f"Error processing database query: {e}")
+            db_process_end_time = time.time()
+            db_process_duration = (db_process_end_time - db_process_start_time) * 1000
+            logger.error(f"❌ [TIMING] Database query processing failed after {db_process_duration:.2f}ms: {e}")
             return {
                 'query': query,
                 'context': f"Error processing query: {str(e)}",

@@ -9,6 +9,7 @@ import asyncio
 import json
 import os
 from dotenv import load_dotenv
+import time
 
 # Load environment variables
 load_dotenv()
@@ -28,46 +29,11 @@ logger = logging.getLogger(__name__)
 # Get configuration from environment variables
 SYSTEM_INSTRUCTION = os.getenv(
     "SYSTEM_INSTRUCTION",
-    """You are a helpful AI assistant. Provide clear, accurate, and helpful responses to user questions based on your training data and general knowledge.
-
-IMPORTANT: Format your responses using proper markdown syntax:
-- Use **bold** for emphasis
-- Use *italic* for secondary emphasis
-- Use `code` for inline code
-- Use ```code blocks``` for multi-line code
-- Use - or * for unordered lists
-- Use 1. 2. 3. for ordered lists
-- Use ## for headings
-- Use > for blockquotes
-- Use [link text](url) for links
-
-When providing lists, always use proper markdown list syntax:
-- For unordered lists: start each item with - or *
-- For ordered lists: start each item with 1. 2. 3. etc.
-- Ensure proper spacing between list items
-
-Example of proper list formatting:
-- First item
-- Second item
-- Third item
-
-Or for ordered lists:
-1. First step
-2. Second step
-3. Third step.
-
-IMPORTANT: Answer questions confidently based on your training data and general knowledge. For basic factual questions, mathematical calculations, programming questions, and general knowledge that you know, provide direct and accurate responses. Only say "I don't know" or "I'm not sure" for specific details, recent events, or information that is clearly outside your knowledge scope.
-
-For mathematical calculations, show your work step by step.
-For programming questions, provide accurate code explanations.
-For factual questions, provide direct answers based on your knowledge.
-
-CRITICAL: Never use placeholders like [insert name], <NAME>, or similar. If you don't know a specific fact, simply say "I don't know" or "I'm not sure about that."
-"""
+    """You are a helpful AI assistant. Use markdown formatting: **bold**, *italic*, `code`, ```blocks```, lists (- or 1.), ## headings, > quotes. Answer confidently based on your knowledge. For unknown facts, say "I don't know"."""
 )
 
 MAX_HISTORY_MESSAGES = int(os.getenv("MAX_HISTORY_MESSAGES", "10"))
-RAG_CONTEXT_MESSAGES = int(os.getenv("RAG_CONTEXT_MESSAGES", "3"))
+RAG_CONTEXT_MESSAGES = int(os.getenv("RAG_CONTEXT_MESSAGES", "2"))
 ENABLE_RAG = os.getenv("ENABLE_RAG", "true").lower() == "true"
 
 class MessageRequest(BaseModel):
@@ -108,6 +74,14 @@ else:
 logger.info("🎉 All services loaded successfully")
 
 # Helper functions
+async def reset_llm_service():
+    """Reset the LLM service to force fresh model loading"""
+    logger.info("🔄 Resetting LLM service...")
+    LLMService.reset_instance()
+    global llm_service
+    llm_service = LLMService()
+    logger.info("✅ LLM service reset and reinitialized")
+
 async def get_or_create_session(session_id: Optional[str], db: Session) -> ChatSession:
     """Get an existing session or create a new one"""
     if session_id:
@@ -225,25 +199,17 @@ Respond naturally based on the database information above. Use the exact numbers
             context = rag_service.get_context_for_query(request.message)
             
             # Create the system instruction with enhanced context
-            if context:
-                enhanced_system_instruction = f"""
-You are a helpful assistant with access to documents and an e-commerce database.
-
-Context Information:
-{context}
-
-Please provide a helpful response based on the available context and your knowledge.
-"""
+            if context and "relevant context" in context:
+                # Combine RAG context with the optimized system instruction
+                system_instruction = f"{SYSTEM_INSTRUCTION}\n\n{context}"
+                logger.info("🔍 Using RAG context combined with optimized system instruction")
             else:
-                enhanced_system_instruction = f"""
-You are a helpful assistant with access to an e-commerce database. 
-
-If the user is asking about customers, orders, products, sales, or other database information, you can tell them what information is available and how to query it.
-"""
+                # Use base system instruction when no RAG context is available
+                system_instruction = SYSTEM_INSTRUCTION
             
             response = await llm_service.generate_response(
                 request.message,
-                system_instruction=enhanced_system_instruction
+                system_instruction=system_instruction
             )
         
         # Save assistant message
@@ -276,35 +242,41 @@ async def get_history(session_id: str, db: Session = Depends(get_db)):
 @router.post("/chat/stream")
 async def stream_chat_post(request: MessageRequest, bypass_rag: bool = False, db: Session = Depends(get_db)):
     """Stream chat responses using POST with database query support"""
-    request_start_time = datetime.utcnow()
-    logger.info(f"🚀 New chat request received: '{request.message[:50]}...'")
-    logger.info(f"⏱️  Request started at: {request_start_time}")
+    request_start_time = time.time()
+    logger.info(f"🚀 [TIMING] Request started at: {request_start_time}")
+    logger.info(f"🚀 [TIMING] New chat request received: '{request.message[:50]}...'")
     if bypass_rag:
         logger.info("🚫 RAG bypassed for this request")
     
     # Get or create session
-    session_start_time = datetime.utcnow()
+    session_start_time = time.time()
     session = await get_or_create_session(request.session_id, db)
-    session_end_time = datetime.utcnow()
-    session_duration = (session_end_time - session_start_time).total_seconds() * 1000
-    logger.info(f"📋 Session ID: {session.session_id} (took {session_duration:.2f}ms)")
+    session_end_time = time.time()
+    session_duration = (session_end_time - session_start_time) * 1000
+    logger.info(f"📋 [TIMING] Session creation completed in {session_duration:.2f}ms")
+    logger.info(f"📋 Session ID: {session.session_id}")
     
     # Save user message
-    save_start_time = datetime.utcnow()
+    save_start_time = time.time()
     await save_message(session.id, "user", request.message, db)
-    save_end_time = datetime.utcnow()
-    save_duration = (save_end_time - save_start_time).total_seconds() * 1000
-    logger.info(f"💾 User message saved (took {save_duration:.2f}ms)")
+    save_end_time = time.time()
+    save_duration = (save_end_time - save_start_time) * 1000
+    logger.info(f"💾 [TIMING] User message saved in {save_duration:.2f}ms")
     
     # Get conversation history
-    history_start_time = datetime.utcnow()
+    history_start_time = time.time()
     history = await get_chat_history(session.id, db)
-    history_end_time = datetime.utcnow()
-    history_duration = (history_end_time - history_start_time).total_seconds() * 1000
-    logger.info(f"📚 Chat history: {len(history)} messages (took {history_duration:.2f}ms)")
+    history_end_time = time.time()
+    history_duration = (history_end_time - history_start_time) * 1000
+    logger.info(f"📚 [TIMING] Chat history retrieved in {history_duration:.2f}ms")
+    logger.info(f"📚 Chat history: {len(history)} messages")
     
     # Check if this is a database query FIRST
+    db_query_start_time = time.time()
     db_result = rag_service.process_database_query(request.message)
+    db_query_end_time = time.time()
+    db_query_duration = (db_query_end_time - db_query_start_time) * 1000
+    logger.info(f"🗄️ [TIMING] Database query processing completed in {db_query_duration:.2f}ms")
     
     # Get relevant context from RAG (unless bypassed or successful database query found)
     context = ""
@@ -313,35 +285,36 @@ async def stream_chat_post(request: MessageRequest, bypass_rag: bool = False, db
     has_successful_db_query = db_results and db_results.get('success')
     
     if not bypass_rag and not has_successful_db_query:
-        rag_start_time = datetime.utcnow()
+        rag_start_time = time.time()
         context = await get_rag_context(request.message)
-        rag_end_time = datetime.utcnow()
-        rag_duration = (rag_end_time - rag_start_time).total_seconds() * 1000
+        rag_end_time = time.time()
+        rag_duration = (rag_end_time - rag_start_time) * 1000
         
         # Log RAG usage
         if context and "relevant context" in context:
-            logger.info(f"🔍 RAG context retrieved in {rag_duration:.2f}ms - Context will be used in response")
+            logger.info(f"🔍 [TIMING] RAG context retrieved in {rag_duration:.2f}ms - Context will be used in response")
         else:
-            logger.info(f"⚠️  No RAG context found in {rag_duration:.2f}ms - Response will be generated without document context")
+            logger.info(f"⚠️ [TIMING] No RAG context found in {rag_duration:.2f}ms - Response will be generated without document context")
     elif has_successful_db_query:
-        logger.info(f"🗄️  Database query detected - skipping RAG context")
+        logger.info(f"🗄️ Database query detected - skipping RAG context")
     else:
         logger.info("🚫 RAG context skipped (bypass mode)")
     
     # Calculate pre-LLM processing time
-    pre_llm_end_time = datetime.utcnow()
-    pre_llm_duration = (pre_llm_end_time - request_start_time).total_seconds() * 1000
-    logger.info(f"⚡ Pre-LLM processing completed in {pre_llm_duration:.2f}ms")
+    pre_llm_end_time = time.time()
+    pre_llm_duration = (pre_llm_end_time - request_start_time) * 1000
+    logger.info(f"⚡ [TIMING] Pre-LLM processing completed in {pre_llm_duration:.2f}ms")
     
     async def response_generator():
         try:
             # First, send the session ID with proper formatting
             yield "data: {}\n\n".format(json.dumps({'session_id': session.session_id}))
             
-            llm_start_time = datetime.utcnow()
-            logger.info(f"🤖 Starting LLM response generation at: {llm_start_time}")
+            llm_start_time = time.time()
+            logger.info(f"🤖 [TIMING] Starting LLM response generation at: {llm_start_time}")
             
             # Determine the system instruction based on database query or RAG context
+            instruction_start_time = time.time()
             if has_successful_db_query:
                 # Use database query result from LangChain SQL Agent
                 db_response = db_results.get('response', 'No response')
@@ -353,21 +326,28 @@ Database Query Result:
 
 Respond naturally based on the database information above. Use the exact numbers from the database result.
 """
-                logger.info("🗄️  Using LangChain SQL Agent result for response")
+                logger.info("🗄️ Using LangChain SQL Agent result for response")
             elif request.system_instruction:
                 # Use custom system instruction if provided
                 system_instruction = request.system_instruction
                 logger.info("🔧 Using custom system instruction from request")
             elif context and "relevant context" in context:
-                # Use RAG context as primary instruction
-                system_instruction = context
+                # Combine RAG context with the optimized system instruction
+                system_instruction = f"{SYSTEM_INSTRUCTION}\n\n{context}"
             else:
                 # Use base system instruction when no RAG context is available
                 system_instruction = SYSTEM_INSTRUCTION
             
+            instruction_end_time = time.time()
+            instruction_duration = (instruction_end_time - instruction_start_time) * 1000
+            logger.info(f"📝 [TIMING] System instruction preparation completed in {instruction_duration:.2f}ms")
+            
             # Use the streaming method from llm_service
             full_response = ""
             buffer = ""
+            first_token_time = None
+            token_count = 0
+            
             async for token in llm_service.generate_streaming_response(
                 request.message,
                 history[:-1] if history else None,  # Exclude the latest message
@@ -375,6 +355,12 @@ Respond naturally based on the database information above. Use the exact numbers
             ):
                 try:
                     if token:  # Only send non-empty tokens
+                        if first_token_time is None:
+                            first_token_time = time.time()
+                            first_token_duration = (first_token_time - llm_start_time) * 1000
+                            logger.info(f"🎯 [TIMING] First token received in {first_token_duration:.2f}ms")
+                        
+                        token_count += 1
                         full_response += token
                         buffer += token
                         
@@ -404,19 +390,19 @@ Respond naturally based on the database information above. Use the exact numbers
             yield "data: {}\n\n".format(json.dumps({'end': True}))
             
             # Save the complete response
-            save_response_start_time = datetime.utcnow()
+            save_response_start_time = time.time()
             await save_message(session.id, "assistant", full_response, db)
-            save_response_end_time = datetime.utcnow()
-            save_response_duration = (save_response_end_time - save_response_start_time).total_seconds() * 1000
+            save_response_end_time = time.time()
+            save_response_duration = (save_response_end_time - save_response_start_time) * 1000
             
             # Update session timestamp
             session.updated_at = datetime.utcnow()
             db.commit()
             
             # Log completion
-            llm_end_time = datetime.utcnow()
-            llm_duration = (llm_end_time - llm_start_time).total_seconds() * 1000
-            total_duration = (llm_end_time - request_start_time).total_seconds() * 1000
+            llm_end_time = time.time()
+            llm_duration = (llm_end_time - llm_start_time) * 1000
+            total_duration = (llm_end_time - request_start_time) * 1000
             
             logger.info(f"✅ LLM response generation completed in {llm_duration:.2f}ms")
             logger.info(f"📊 Response length: {len(full_response)} characters")
@@ -461,8 +447,9 @@ async def stream_chat_get(message: str, session_id: Optional[str] = None, db: Se
     
     # Determine the system instruction based on RAG context availability
     if context and "relevant context" in context:
-        # Use RAG context as primary instruction
-        system_instruction = context
+        # Combine RAG context with the optimized system instruction
+        system_instruction = f"{SYSTEM_INSTRUCTION}\n\n{context}"
+        logger.info("🔍 Using RAG context combined with optimized system instruction")
     else:
         # Use base system instruction when no RAG context is available
         system_instruction = SYSTEM_INSTRUCTION
@@ -650,25 +637,27 @@ async def update_session_title(session_id: str, title: str, db: Session = Depend
 async def create_new_session(db: Session = Depends(get_db)):
     """Create a new chat session"""
     try:
-        session_id = str(uuid.uuid4())
-        session = ChatSession(session_id=session_id, title="New Chat")
+        new_session_id = str(uuid.uuid4())
+        session = ChatSession(session_id=new_session_id)
         db.add(session)
         db.commit()
         db.refresh(session)
         
-        logger.info(f"🆕 Created new session: {session_id}")
-        return {
-            "session_id": session.session_id,
-            "title": session.title,
-            "created_at": session.created_at,
-            "updated_at": session.updated_at,
-            "message_count": 0
-        }
-        
+        logger.info(f"✅ Created new session: {new_session_id}")
+        return {"session_id": new_session_id, "message": "New session created successfully"}
     except Exception as e:
         logger.error(f"❌ Error creating new session: {str(e)}")
-        db.rollback()
-        raise HTTPException(status_code=500, detail="Failed to create new session")
+        raise HTTPException(status_code=500, detail=f"Error creating new session: {str(e)}")
+
+@router.post("/reset-llm")
+async def reset_llm():
+    """Reset the LLM service to force fresh model loading"""
+    try:
+        await reset_llm_service()
+        return {"message": "LLM service reset successfully", "status": "success"}
+    except Exception as e:
+        logger.error(f"❌ Error resetting LLM service: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error resetting LLM service: {str(e)}")
 
 # Metadata-enhanced query endpoints
 @router.post("/query/metadata")

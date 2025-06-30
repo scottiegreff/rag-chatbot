@@ -58,6 +58,8 @@ services:
         - linux/amd64  # For cloud VMs
         - linux/arm64  # For M1 Mac
     container_name: fci-chatbot-backend
+    env_file:
+      - env.local-dev
     environment:
       # Database Configuration
       DB_HOST: postgres
@@ -89,7 +91,6 @@ services:
       
       # Performance Configuration
       MAX_HISTORY_MESSAGES: ${MAX_HISTORY_MESSAGES:-50}
-      RAG_CONTEXT_MESSAGES: ${RAG_CONTEXT_MESSAGES:-10}
       ENABLE_INTERNET_SEARCH: ${ENABLE_INTERNET_SEARCH:-false}
       
       # Platform-specific optimizations

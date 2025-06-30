@@ -563,7 +563,7 @@ body {
     .sidebar-close-icon {
         width: 12px !important;
         height: 12px !important;
-        filter: brightness(0) invert(1) !important;
+        filter: brightness(0) !important;
     }
     
     .chat-container {
@@ -593,6 +593,11 @@ body {
     
     #chat-form button {
         padding: 8px 16px;
+    }
+    
+    /* Make upload success icon black on mobile */
+    .message.upload-success .upload-icon svg {
+        filter: brightness(0) !important;
     }
 }
 
