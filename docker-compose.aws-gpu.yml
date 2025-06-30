@@ -1,0 +1,114 @@
+# AWS GPU Production override for docker-compose.yml
+# Use with: docker-compose -f docker-compose.yml -f docker-compose.aws-gpu.yml up
+# Requires: NVIDIA Docker runtime and GPU-enabled instance
+
+version: '3.8'
+
+services:
+  backend:
+    env_file:
+      - env.aws-gpu
+    environment:
+      # GPU-specific environment variables
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      # Production optimizations
+      DEBUG: "false"
+      ENABLE_INTERNET_SEARCH: "false"
+      RAG_USE_CPU: "true"
+      # GPU acceleration
+      CT_CUDA: "1"
+      GPU_LAYERS: "35"
+    command: ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+    volumes:
+      # Remove source code mount in production
+      - ./models:/app/models:ro
+      - ./logs:/app/logs
+      - sentence_transformer_cache:/root/.cache/huggingface
+      - llm_cache:/root/.cache/llama-cpp
+    restart: unless-stopped
+    # GPU resource limits for production
+    deploy:
+      resources:
+        limits:
+          memory: 12G
+          cpus: 6.0
+        reservations:
+          memory: 8G
+          cpus: 4.0
+    # GPU runtime configuration
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+  frontend:
+    # Enable frontend service in production
+    profiles: []
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: 0.5
+        reservations:
+          memory: 256M
+          cpus: 0.25
+
+  postgres:
+    # Enhanced resource limits for production database
+    environment:
+      POSTGRES_DB: fci_chatbot
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password1234
+      # Performance tuning
+      POSTGRES_SHARED_BUFFERS: 256MB
+      POSTGRES_EFFECTIVE_CACHE_SIZE: 1GB
+      POSTGRES_WORK_MEM: 4MB
+      POSTGRES_MAINTENANCE_WORK_MEM: 64MB
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: 2.0
+        reservations:
+          memory: 1G
+          cpus: 1.0
+    restart: unless-stopped
+
+  weaviate:
+    # Enhanced resource limits for vector database
+    environment:
+      QUERY_DEFAULTS_LIMIT: 25
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
+      PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
+      DEFAULT_VECTORIZER_MODULE: 'none'
+      ENABLE_MODULES: ''
+      ENABLE_GRPC: 'true'
+      CLUSTER_HOSTNAME: 'node1'
+      # Performance tuning
+      GOMEMLIMIT: 1536MiB
+      GOMAXPROCS: 2
+    deploy:
+      resources:
+        limits:
+          memory: 3G
+          cpus: 2.0
+        reservations:
+          memory: 1.5G
+          cpus: 1.0
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  weaviate_data:
+    driver: local
+  sentence_transformer_cache:
+    driver: local
+  llm_cache:
+    driver: local
+
+networks:
+  fci-network:
+    driver: bridge 
