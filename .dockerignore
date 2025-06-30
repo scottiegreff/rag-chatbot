@@ -52,16 +52,19 @@ docker-compose*
 # Documentation
 README.md
 *.md
+docs/
 
 # Tests
 tests/
 test_*.py
+*_test.py
 
 # Development files
 .env
 *.log
 *.sqlite
 *.db
+.env.*
 
 # Large files that should be mounted as volumes
 chroma_db/
@@ -75,4 +78,19 @@ yarn-error.log*
 
 # Temporary files
 *.tmp
-*.temp 
+*.temp
+
+# Additional exclusions for smaller build context
+frontend/  # Exclude frontend from backend build
+terraform/
+deployment/
+*.sh
+*.yml
+*.yaml
+!docker-compose.yml
+!requirements*.txt
+
+# Logs and cache
+logs/
+.cursor/
+*.backup 

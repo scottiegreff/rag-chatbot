@@ -609,7 +609,6 @@ class LangChainSQLService:
             
             # List queries with numbers (e.g., "list our 5 cheapest products")
             elif any(phrase in query_lower for phrase in ["list our", "show our", "top"]) and any(phrase in query_lower for phrase in ["cheapest products", "most expensive products", "best selling products", "top selling products", "most popular products"]):
-                import re
                 # Extract number from query
                 number_match = re.search(r'(\d+)', query)
                 limit = int(number_match.group(1)) if number_match else 5

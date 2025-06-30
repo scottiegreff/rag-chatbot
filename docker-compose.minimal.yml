@@ -1,0 +1,22 @@
+# Docker Compose override for minimal backend image
+services:
+  backend:
+    image: fci-chatbot-backend:minimal
+    build:
+      context: .
+      dockerfile: Dockerfile.backend.minimal
+      target: runtime
+    # Remove development volumes
+    volumes:
+      - ./models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf:/models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf:ro
+      - sentence_transformer_cache:/root/.cache/huggingface
+      - llm_cache:/root/.cache/llama-cpp
+    # Optimize resource limits for smaller image
+    deploy:
+      resources:
+        limits:
+          memory: 6G
+          cpus: 4.0
+        reservations:
+          memory: 3G
+          cpus: 2.0 

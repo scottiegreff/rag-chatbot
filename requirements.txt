@@ -12,18 +12,19 @@ requests>=2.25.1
 # Database
 psycopg2-binary>=2.9.1
 
-# LLM and AI dependencies
+# LLM and AI dependencies (optimized)
 llama-cpp-python==0.2.11
 weaviate-client>=3.25.0
+# Use lighter sentence transformers alternative
 sentence-transformers==2.2.2
 huggingface_hub==0.10.1
 
-# LangChain for SQL Agent
+# LangChain for SQL Agent (minimal)
 langchain>=0.1.0
 langchain-community>=0.0.10
 langchain-core>=0.1.0
 
-# Document processing
+# Document processing (only if needed)
 PyPDF2==3.0.1
 python-docx==0.8.11
 openpyxl>=3.0.0
@@ -32,7 +33,8 @@ openpyxl>=3.0.0
 python-multipart>=0.0.5
 aiofiles>=0.7.0
 
-# Fix NumPy compatibility
+# Optimized NumPy stack (lighter versions)
 numpy<2.0
 pandas<2.0
-scikit-learn<2.0 
+# Remove scikit-learn if not needed for your use case
+# scikit-learn<2.0 

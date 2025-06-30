@@ -86,7 +86,8 @@ class RAGService:
         # Use CPU by default to avoid GPU/Metal contention with LLM
         device = 'cpu' if RAG_USE_CPU else 'auto'
         if SENTENCE_TRANSFORMERS_AVAILABLE:
-            self.embedding_model = SentenceTransformer('sentence-transformers/all-mpnet-base-v2', device=device)
+            # Use smaller model for reduced size (80MB vs 438MB)
+            self.embedding_model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2', device=device)
         else:
             self.embedding_model = None
         embedding_end_time = datetime.utcnow()
@@ -467,7 +468,7 @@ class RAGService:
             logger.info(f"🔍 Performing local RAG search for: {query}")
             local_results = self.query_documents(query, n_results=n_local_results)
             results['local_results'] = local_results
-            logger.info(f"✅ Found {len(local_results.get('documents', []))} local results")
+            logger.info(f"✅ Found {len(local_results.objects) if hasattr(local_results, 'objects') else 0} local results")
         except Exception as e:
             logger.error(f"❌ Local RAG search failed: {e}")
             results['local_results'] = {'documents': [], 'metadatas': [], 'ids': []}
@@ -556,13 +557,14 @@ class RAGService:
             context_parts = []
             
             # Add local document context
-            local_results = hybrid_results.get('local_results', {})
-            if local_results and local_results.get('documents'):
+            local_results = hybrid_results.get('local_results')
+            if local_results and hasattr(local_results, 'objects') and local_results.objects:
                 context_parts.append("📄 Relevant Documents:")
-                for i, doc in enumerate(local_results['documents'][0], 1):
-                    metadata = local_results['metadatas'][0][i-1] if local_results.get('metadatas') else {}
-                    source_info = f" (Source: {metadata.get('source', 'Unknown')})" if metadata.get('source') else ""
-                    context_parts.append(f"{i}. {doc[:200]}...{source_info}")
+                for i, obj in enumerate(local_results.objects, 1):
+                    content = obj.properties.get('content', '') if hasattr(obj, 'properties') else ''
+                    source = obj.properties.get('source', 'Unknown') if hasattr(obj, 'properties') else 'Unknown'
+                    source_info = f" (Source: {source})" if source != 'Unknown' else ""
+                    context_parts.append(f"{i}. {content[:200]}...{source_info}")
             
             # Add internet search context
             web_results = hybrid_results.get('web_results', [])
