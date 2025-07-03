@@ -108,7 +108,7 @@ services:
       - sentence_transformer_cache:/root/.cache/huggingface  # Cache for sentence transformer models
       - llm_cache:/root/.cache/llama-cpp  # Cache for llama-cpp models
     ports:
-      - "8000:8000"
+      - "8001:8000"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/database/health"]
       interval: 30s
