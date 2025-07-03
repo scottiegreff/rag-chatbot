@@ -1,6 +1,7 @@
 # Git
 .git
 .gitignore
+terraform.tfvars
 
 # Python
 __pycache__
