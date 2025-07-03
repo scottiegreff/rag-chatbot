@@ -19,4 +19,8 @@ services:
           cpus: 1.5
         reservations:
           memory: 2G
-          cpus: 0.5 
+          cpus: 0.5
+
+volumes:
+  sentence_transformer_cache:
+  llm_cache: 

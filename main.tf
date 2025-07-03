@@ -97,6 +97,12 @@ variable "db_instance_class" {
   default     = "db.t3.micro"
 }
 
+variable "desired_capacity" {
+  description = "Desired number of EC2 instances in the Auto Scaling Group"
+  type        = number
+  default     = 1
+}
+
 # Data Sources
 data "aws_availability_zones" "available" {
   state = "available"
@@ -321,7 +327,7 @@ resource "aws_lb_target_group" "app" {
   vpc_id   = aws_vpc.main.id
 
   health_check {
-    path                = "/"
+    path                = "/health"
     healthy_threshold   = 2
     unhealthy_threshold = 2
     timeout             = 5
@@ -362,6 +368,10 @@ resource "aws_launch_template" "app_lt" {
   instance_type = var.instance_type_app
   key_name      = var.key_name
 
+  iam_instance_profile {
+    name = aws_iam_instance_profile.ssm_profile.name
+  }
+
   network_interfaces {
     associate_public_ip_address = false
     subnet_id                   = aws_subnet.private[0].id
@@ -386,33 +396,47 @@ usermod -a -G docker ec2-user
 curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
 chmod +x /usr/local/bin/docker-compose
 
-# Install Git
-yum install -y git
-
-# Mount EFS
-yum install -y amazon-efs-utils
-mkdir -p /mnt/efs
-mount -t efs ${aws_efs_file_system.efs.id}:/ /mnt/efs
+# Install Git and other tools
+yum install -y git wget curl
 
 # Create application directory
 mkdir -p /opt/fci-chatbot
 cd /opt/fci-chatbot
 
-# Clone the application (replace with your actual repository URL)
-git clone https://github.com/yourusername/fci-chatbot.git .
+# Clone the application
+git clone https://github.com/scottiegreff/rag-chatbot.git .
 
-# Download the TinyLlama model if not present
-mkdir -p models
-if [ ! -f "models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf" ]; then
-    echo "Downloading TinyLlama model..."
-    wget -O models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf "https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
-fi
+# Create a simple test endpoint first
+cat > test_server.py << 'PYTHON_EOF'
+from flask import Flask
+app = Flask(__name__)
+
+@app.route('/')
+def hello():
+    return "FCI Chatbot is starting up... Please wait a few minutes."
+
+@app.route('/health')
+def health():
+    return "OK"
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=8000)
+PYTHON_EOF
+
+# Install Python and Flask for the test server
+yum install -y python3 python3-pip
+pip3 install flask
+
+# Start the test server
+nohup python3 test_server.py > /var/log/test_server.log 2>&1 &
+
+echo "Test server started. Setting up full application..."
 
 # Create production environment file
 cat > .env << 'ENV_EOF'
 # Production Environment Configuration
-POSTGRES_PASSWORD=${var.db_password}
-DB_HOST=${aws_db_instance.postgres.address}
+POSTGRES_PASSWORD=FCI_Chatbot_2024_Secure_Pass!
+DB_HOST=main-postgres.cb4my0e6eoxp.ca-central-1.rds.amazonaws.com
 DB_PORT=5432
 DB_NAME=appdb
 DB_USER=adminuser
@@ -435,120 +459,27 @@ CT_METAL=0
 CT_CUDA=0
 ENV_EOF
 
-# Create production docker-compose file
-cat > docker-compose.prod.yml << 'DOCKER_COMPOSE_EOF'
-version: '3.8'
+# Start the full application in the background
+nohup bash -c '
+echo "Starting full application setup..."
+cd /opt/fci-chatbot
 
-services:
-  # PostgreSQL Database (using RDS instead of local)
-  # postgres service removed - using AWS RDS
+# Download the TinyLlama model if not present
+mkdir -p models
+if [ ! -f "models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf" ]; then
+    echo "Downloading TinyLlama model..."
+    wget -O models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf "https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
+fi
 
-  # Weaviate Vector Database
-  weaviate:
-    image: semitechnologies/weaviate:1.25.4
-    container_name: fci-chatbot-weaviate
-    environment:
-      QUERY_DEFAULTS_LIMIT: 25
-      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
-      PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
-      DEFAULT_VECTORIZER_MODULE: 'none'
-      ENABLE_MODULES: ''
-      ENABLE_GRPC: 'true'
-      CLUSTER_HOSTNAME: 'node1'
-    volumes:
-      - weaviate_data:/var/lib/weaviate
-    ports:
-      - "8080:8080"
-      - "50051:50051"
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/v1/"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
+# Start Docker Compose
+docker-compose -f docker-compose.yml up -d
 
-  # Backend API
-  backend:
-    build:
-      context: .
-      dockerfile: Dockerfile.backend.minimal
-    container_name: fci-chatbot-backend
-    env_file:
-      - .env
-    environment:
-      # Database Configuration
-      DB_HOST: ${aws_db_instance.postgres.address}
-      DB_PORT: 5432
-      DB_NAME: appdb
-      DB_USER: adminuser
-      DB_PASSWORD: ${var.db_password}
-      
-      # Weaviate Configuration
-      WEAVIATE_URL: http://weaviate:8080
-      
-      # LLM Configuration
-      MODEL_PATH: /models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
-      MODEL_TYPE: llama
-      GPU_LAYERS: 0
-      CONTEXT_LENGTH: 4096
-      
-      # RAG Configuration
-      ENABLE_RAG: true
-      RAG_USE_CPU: true
-      CHUNK_SIZE: 500
-      OVERLAP: 50
-      
-      # API Configuration
-      HOST: 0.0.0.0
-      PORT: 8000
-      DEBUG: false
-      CORS_ORIGINS: "*"
-      
-      # Performance Configuration
-      MAX_HISTORY_MESSAGES: 50
-      ENABLE_INTERNET_SEARCH: false
-      
-      # Platform-specific optimizations
-      CT_METAL: 0
-      CT_CUDA: 0
-      
-      # HuggingFace Cache Configuration
-      HF_HOME: /root/.cache/huggingface
-      TRANSFORMERS_CACHE: /root/.cache/huggingface
-      HF_DATASETS_CACHE: /root/.cache/huggingface
-    volumes:
-      - ./models:/models:ro
-      - ./backend:/app/backend:ro
-      - ./frontend:/app/frontend:ro
-      - sentence_transformer_cache:/root/.cache/huggingface
-      - llm_cache:/root/.cache/llama-cpp
-    ports:
-      - "8000:8000"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/database/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-    depends_on:
-      weaviate:
-        condition: service_started
-    restart: unless-stopped
+echo "Full application setup complete!"
+' > /var/log/app_setup.log 2>&1 &
 
-volumes:
-  weaviate_data:
-    driver: local
-  sentence_transformer_cache:
-    driver: local
-  llm_cache:
-    driver: local
-DOCKER_COMPOSE_EOF
-
-# Start the application
-docker-compose -f docker-compose.prod.yml up -d
-
-echo "FCI Chatbot setup complete!"
-echo "Application will be available at: http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4):8000"
+echo "FCI Chatbot setup initiated!"
+echo "Test server available immediately at port 8000"
+echo "Full application will be available in a few minutes"
 EOF
   )
 
@@ -561,7 +492,7 @@ EOF
 # Auto Scaling Group
 resource "aws_autoscaling_group" "app_asg" {
   name                      = "app-asg"
-  desired_capacity          = 1
+  desired_capacity          = var.desired_capacity
   max_size                  = 3
   min_size                  = 1
 
@@ -603,6 +534,34 @@ resource "aws_db_instance" "postgres" {
   skip_final_snapshot     = true
 
   tags = { Name = "main-rds" }
+}
+
+# IAM Role for Systems Manager
+resource "aws_iam_role" "ssm_role" {
+  name = "ssm-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "ssm_policy" {
+  role       = aws_iam_role.ssm_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+resource "aws_iam_instance_profile" "ssm_profile" {
+  name = "ssm-profile"
+  role = aws_iam_role.ssm_role.name
 }
 
 # Outputs

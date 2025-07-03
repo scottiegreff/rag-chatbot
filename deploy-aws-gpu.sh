@@ -117,10 +117,27 @@ print_status "Key pair saved as $KEY_NAME.pem"
 print_status "Finding latest Ubuntu AMI..."
 AMI_ID=$(aws ec2 describe-images \
     --owners 099720109477 \
-    --filters "Name=name,Values=ubuntu/images/hvm-ssd/ubuntu-22.04-amd64-server-*" \
+    --filters "Name=name,Values=ubuntu/images/hvm-ssd/ubuntu-22.04-amd64-server-*" "Name=state,Values=available" \
     --query 'sort_by(Images, &CreationDate)[-1].ImageId' \
     --output text \
     --region "$REGION")
+
+# Validate AMI ID
+if [ "$AMI_ID" = "None" ] || [ -z "$AMI_ID" ]; then
+    print_error "Failed to find a valid Ubuntu AMI. Trying alternative approach..."
+    # Try a more specific filter
+    AMI_ID=$(aws ec2 describe-images \
+        --owners 099720109477 \
+        --filters "Name=name,Values=ubuntu/images/hvm-ssd/ubuntu-22.04-amd64-server-20231207" "Name=state,Values=available" \
+        --query 'Images[0].ImageId' \
+        --output text \
+        --region "$REGION")
+fi
+
+if [ "$AMI_ID" = "None" ] || [ -z "$AMI_ID" ]; then
+    print_error "Still cannot find a valid Ubuntu AMI. Please check your AWS region and permissions."
+    exit 1
+fi
 
 print_status "Using AMI: $AMI_ID"
 
