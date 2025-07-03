@@ -417,34 +417,55 @@ resource "aws_launch_template" "app_lt" {
 #!/bin/bash
 set -e
 
+# Enable logging
+exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
+
+echo "=== Starting user_data script ==="
+date
+
 # Update system
+echo "Updating system packages..."
 yum update -y
 
-# Install Python 3.9 (specific version for compatibility)
-yum install -y python3.9 python3.9-pip python3.9-devel
-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.9 1
-alternatives --install /usr/bin/pip3 pip3 /usr/bin/pip3.9 1
+# Install Python 3.9 (Amazon Linux 2 doesn't have 3.9, so we'll use 3.8 and enable EPEL)
+echo "Installing Python 3..."
+yum install -y python3 python3-pip python3-devel
+alternatives --install /usr/bin/python3 python3 /usr/bin/python3 1
+alternatives --install /usr/bin/pip3 pip3 /usr/bin/pip3 1
+
+echo "Python version: $(python3 --version)"
+echo "Pip version: $(pip3 --version)"
 
 # Install Docker
+echo "Installing Docker..."
 yum install -y docker
 systemctl start docker
 systemctl enable docker
 usermod -a -G docker ec2-user
 
+echo "Docker version: $(docker --version)"
+
 # Install Docker Compose (latest version)
+echo "Installing Docker Compose..."
 DOCKER_COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep 'tag_name' | cut -d" -f4)
+echo "Docker Compose version: $DOCKER_COMPOSE_VERSION"
 curl -L "https://github.com/docker/compose/releases/download/$${DOCKER_COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
 chmod +x /usr/local/bin/docker-compose
 
+echo "Docker Compose version: $(docker-compose --version)"
+
 # Install additional tools
+echo "Installing additional tools..."
 yum install -y git wget curl jq
 
 # Create application directory
+echo "Creating application directory..."
 mkdir -p /opt/fci-chatbot
 cd /opt/fci-chatbot
 
-# Clone the application
-git clone https://github.com/scottiegreff/rag-chatbot.git .
+# Clone the application (using the correct repository)
+echo "Cloning application repository..."
+git clone https://github.com/scottiegreff/FCI-Chatbot-clean.git .
 
 # Create a startup script that handles the transition properly
 cat > /opt/fci-chatbot/startup.sh << 'STARTUP_EOF'
