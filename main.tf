@@ -588,8 +588,8 @@ resource "aws_autoscaling_group" "app_asg" {
 
   vpc_zone_identifier       = aws_subnet.private[*].id
   target_group_arns         = [aws_lb_target_group.app.arn]
-  health_check_type         = "ELB"
-  health_check_grace_period = 300
+  health_check_type         = "EC2"
+  health_check_grace_period = 600
 
   tag {
     key                 = "Name"
