@@ -37,6 +37,7 @@ wheels/
 # Database
 *.db
 *.sqlite3
+*.db.backup
 
 # IDE
 .idea/
