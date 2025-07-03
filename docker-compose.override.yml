@@ -13,15 +13,7 @@ services:
       - ./models:/app/models:ro
     # Remove restart policy for development
     restart: "no"
-    # Remove resource limits for development
-    deploy:
-      resources:
-        limits:
-          memory: 8G
-          cpus: 4.0
-        reservations:
-          memory: 4G
-          cpus: 2.0
+    # Resource limits removed for t3.medium compatibility
 
   frontend:
     # Disable frontend service in development (backend serves it)
