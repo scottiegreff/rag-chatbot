@@ -123,15 +123,7 @@ services:
     networks:
       - fci-network
     restart: unless-stopped
-    # Resource limits for cloud deployment
-    deploy:
-      resources:
-        limits:
-          memory: ${MEMORY_LIMIT:-4G}
-          cpus: ${CPU_LIMIT:-1.5}
-        reservations:
-          memory: ${MEMORY_RESERVATION:-2G}
-          cpus: ${CPU_RESERVATION:-0.5}
+    # Resource limits removed for t3.medium compatibility
 
   # Frontend (Optional - can be served by backend)
   frontend:
