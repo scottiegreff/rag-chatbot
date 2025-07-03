@@ -24,8 +24,10 @@ print_error() {
 
 # Check if Terraform is initialized
 if [ ! -d ".terraform" ]; then
-    print_error "Terraform not initialized. Run 'terraform init' first."
-    exit 1
+    print_warning "Terraform not initialized. This is normal for a fresh deployment."
+    print_status "Proceeding with cleanup checks..."
+else
+    print_status "Terraform is initialized. Checking current state..."
 fi
 
 # Check if we're in the right directory
@@ -36,9 +38,13 @@ fi
 
 print_status "Checking current Terraform state..."
 
-# List current resources
-print_status "Current resources:"
-terraform state list
+# List current resources (if Terraform is initialized)
+if [ -d ".terraform" ]; then
+    print_status "Current resources:"
+    terraform state list 2>/dev/null || print_warning "No Terraform state found or no resources exist."
+else
+    print_status "Skipping Terraform state check (not initialized)."
+fi
 
 # Ask for confirmation
 echo ""
@@ -51,14 +57,19 @@ fi
 
 print_status "Starting Terraform destroy..."
 
-# Destroy with auto-approve
-terraform destroy -auto-approve
+# Only run terraform destroy if Terraform is initialized
+if [ -d ".terraform" ]; then
+    # Destroy with auto-approve
+    terraform destroy -auto-approve
 
-if [ $? -eq 0 ]; then
-    print_status "✅ Terraform destroy completed successfully!"
+    if [ $? -eq 0 ]; then
+        print_status "✅ Terraform destroy completed successfully!"
+    else
+        print_error "❌ Terraform destroy failed!"
+        exit 1
+    fi
 else
-    print_error "❌ Terraform destroy failed!"
-    exit 1
+    print_status "Skipping Terraform destroy (not initialized)."
 fi
 
 # Clean up Terraform files
