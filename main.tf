@@ -103,6 +103,30 @@ variable "desired_capacity" {
   default     = 1
 }
 
+variable "app_port" {
+  description = "Port for the application backend"
+  type        = number
+  default     = 8000
+}
+
+variable "health_port" {
+  description = "Port for the health check server"
+  type        = number
+  default     = 8081
+}
+
+variable "git_repository" {
+  description = "Git repository URL for the application"
+  type        = string
+  default     = "https://github.com/scottiegreff/rag-chatbot.git"
+}
+
+variable "python_version" {
+  description = "Python version to install"
+  type        = string
+  default     = "3.9"
+}
+
 # Data Sources
 data "aws_availability_zones" "available" {
   state = "available"
@@ -327,11 +351,12 @@ resource "aws_lb_target_group" "app" {
   vpc_id   = aws_vpc.main.id
 
   health_check {
-    path                = "/health"
+    path                = "/api/database/health"
     healthy_threshold   = 2
     unhealthy_threshold = 2
     timeout             = 5
     interval            = 30
+    matcher             = "200"
   }
 
   tags = { Name = "app-tg" }
@@ -378,6 +403,15 @@ resource "aws_launch_template" "app_lt" {
     security_groups             = [aws_security_group.app.id]
   }
 
+  block_device_mappings {
+    device_name = "/dev/xvda"
+    ebs {
+      volume_size = 32
+      volume_type = "gp3"
+      delete_on_termination = true
+    }
+  }
+
   user_data = base64encode(
     <<-EOF
 #!/bin/bash
@@ -386,18 +420,24 @@ set -e
 # Update system
 yum update -y
 
+# Install Python 3.9 (specific version for compatibility)
+yum install -y python3.9 python3.9-pip python3.9-devel
+alternatives --install /usr/bin/python3 python3 /usr/bin/python3.9 1
+alternatives --install /usr/bin/pip3 pip3 /usr/bin/pip3.9 1
+
 # Install Docker
 yum install -y docker
 systemctl start docker
 systemctl enable docker
 usermod -a -G docker ec2-user
 
-# Install Docker Compose
-curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+# Install Docker Compose (latest version)
+DOCKER_COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep 'tag_name' | cut -d\" -f4)
+curl -L "https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
 chmod +x /usr/local/bin/docker-compose
 
-# Install Git and other tools
-yum install -y git wget curl
+# Install additional tools
+yum install -y git wget curl jq
 
 # Create application directory
 mkdir -p /opt/fci-chatbot
@@ -406,31 +446,42 @@ cd /opt/fci-chatbot
 # Clone the application
 git clone https://github.com/scottiegreff/rag-chatbot.git .
 
-# Create a simple test endpoint first
-cat > test_server.py << 'PYTHON_EOF'
-from flask import Flask
-app = Flask(__name__)
+# Create a startup script that handles the transition properly
+cat > /opt/fci-chatbot/startup.sh << 'STARTUP_EOF'
+#!/bin/bash
+set -e
 
-@app.route('/')
-def hello():
-    return "FCI Chatbot is starting up... Please wait a few minutes."
+echo "Starting FCI Chatbot deployment..."
 
-@app.route('/health')
-def health():
-    return "OK"
+# Function to check if port is in use
+check_port() {
+    local port=$1
+    if lsof -i :$port > /dev/null 2>&1; then
+        echo "Port $port is in use, stopping process..."
+        lsof -ti :$port | xargs kill -9
+        sleep 2
+    fi
+}
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8000)
-PYTHON_EOF
-
-# Install Python and Flask for the test server
-yum install -y python3 python3-pip
-pip3 install flask
-
-# Start the test server
-nohup python3 test_server.py > /var/log/test_server.log 2>&1 &
-
-echo "Test server started. Setting up full application..."
+# Function to wait for service to be ready
+wait_for_service() {
+    local url=$1
+    local max_attempts=30
+    local attempt=1
+    
+    echo "Waiting for service at $url..."
+    while [ $attempt -le $max_attempts ]; do
+        if curl -f -s $url > /dev/null 2>&1; then
+            echo "Service is ready!"
+            return 0
+        fi
+        echo "Attempt $attempt/$max_attempts - Service not ready yet..."
+        sleep 10
+        attempt=$((attempt + 1))
+    done
+    echo "Service failed to start within expected time"
+    return 1
+}
 
 # Create production environment file
 cat > .env << 'ENV_EOF'
@@ -459,11 +510,6 @@ CT_METAL=0
 CT_CUDA=0
 ENV_EOF
 
-# Start the full application in the background
-nohup bash -c '
-echo "Starting full application setup..."
-cd /opt/fci-chatbot
-
 # Download the TinyLlama model if not present
 mkdir -p models
 if [ ! -f "models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf" ]; then
@@ -471,15 +517,54 @@ if [ ! -f "models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf" ]; then
     wget -O models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf "https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
 fi
 
+# Stop any existing processes on port 8000
+check_port 8000
+
 # Start Docker Compose
-docker-compose -f docker-compose.yml up -d
+echo "Starting Docker Compose..."
+/usr/local/bin/docker-compose down || true
+/usr/local/bin/docker-compose up -d
 
-echo "Full application setup complete!"
-' > /var/log/app_setup.log 2>&1 &
+# Wait for backend to be ready
+wait_for_service "http://localhost:8000/api/database/health"
 
-echo "FCI Chatbot setup initiated!"
-echo "Test server available immediately at port 8000"
-echo "Full application will be available in a few minutes"
+echo "FCI Chatbot deployment complete!"
+echo "Application is available at: http://localhost:8000"
+echo "Health check: http://localhost:8000/api/database/health"
+STARTUP_EOF
+
+chmod +x /opt/fci-chatbot/startup.sh
+
+# Create a simple health check endpoint (different port to avoid conflicts)
+cat > /opt/fci-chatbot/health_server.py << 'HEALTH_EOF'
+from flask import Flask
+app = Flask(__name__)
+
+@app.route('/')
+def health():
+    return {"status": "deploying", "message": "FCI Chatbot is being deployed..."}
+
+@app.route('/ready')
+def ready():
+    return {"status": "ready", "message": "FCI Chatbot is ready!"}
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=8081)
+HEALTH_EOF
+
+# Install Flask for health server
+pip3 install flask
+
+# Start health server on port 8081 (different from main app)
+nohup python3 /opt/fci-chatbot/health_server.py > /var/log/health_server.log 2>&1 &
+
+# Start the main application deployment
+nohup /opt/fci-chatbot/startup.sh > /var/log/app_deployment.log 2>&1 &
+
+echo "FCI Chatbot deployment initiated!"
+echo "Health server available at: http://localhost:8081"
+echo "Main application will be available at: http://localhost:8000"
+echo "Check logs: tail -f /var/log/app_deployment.log"
 EOF
   )
 
