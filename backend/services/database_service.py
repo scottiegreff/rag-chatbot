@@ -1,6 +1,12 @@
 import sqlite3
 import psycopg2
-import mysql.connector
+# MySQL connector - only import if available
+try:
+    import mysql.connector
+    MYSQL_AVAILABLE = True
+except ImportError:
+    MYSQL_AVAILABLE = False
+    mysql = None
 # import pandas as pd  # Temporarily disabled for minimal build
 from typing import Dict, List, Any, Optional, Union
 import logging
@@ -70,6 +76,8 @@ class DatabaseService:
                 
             elif self.db_type == 'mysql':
                 # MySQL connection
+                if not MYSQL_AVAILABLE:
+                    raise ValueError("MySQL connector not available. Install mysql-connector-python to use MySQL.")
                 if not self.connection_string:
                     raise ValueError("MySQL requires connection string")
                 self.engine = create_engine(self.connection_string)
