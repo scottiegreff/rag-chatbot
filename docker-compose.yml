@@ -127,11 +127,11 @@ services:
     deploy:
       resources:
         limits:
-          memory: ${MEMORY_LIMIT:-8G}
-          cpus: ${CPU_LIMIT:-6.0}
+          memory: ${MEMORY_LIMIT:-4G}
+          cpus: ${CPU_LIMIT:-1.5}
         reservations:
-          memory: ${MEMORY_RESERVATION:-4G}
-          cpus: ${CPU_RESERVATION:-3.0}
+          memory: ${MEMORY_RESERVATION:-2G}
+          cpus: ${CPU_RESERVATION:-0.5}
 
   # Frontend (Optional - can be served by backend)
   frontend:
