@@ -221,49 +221,19 @@ resource "aws_route_table_association" "private" {
 }
 
 # Security Groups
-resource "aws_security_group" "alb" {
-  name        = "alb-sg"
-  description = "Allow HTTP/HTTPS"
-  vpc_id      = aws_vpc.main.id
-
-  ingress {
-    description      = "HTTP"
-    from_port        = 80
-    to_port          = 80
-    protocol         = "tcp"
-    cidr_blocks      = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    description      = "HTTPS"
-    from_port        = 443
-    to_port          = 443
-    protocol         = "tcp"
-    cidr_blocks      = ["0.0.0.0/0"]
-  }
-
-  egress {
-    description = "All outbound"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = { Name = "alb-sg" }
-}
+# ALB security group removed - no longer needed
 
 resource "aws_security_group" "app" {
   name        = "app-sg"
-  description = "Allow ALB and SSH"
+  description = "Allow HTTP and SSH"
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    description      = "From ALB"
-    from_port        = 8000
-    to_port          = 8000
-    protocol         = "tcp"
-    security_groups  = [aws_security_group.alb.id]
+    description = "HTTP from anywhere"
+    from_port   = 8000
+    to_port     = 8000
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   ingress {
@@ -333,45 +303,7 @@ resource "aws_security_group" "efs" {
   tags = { Name = "efs-sg" }
 }
 
-# Application Load Balancer
-resource "aws_lb" "alb" {
-  name               = "main-alb"
-  internal           = false
-  load_balancer_type = "application"
-  security_groups    = [aws_security_group.alb.id]
-  subnets            = aws_subnet.public[*].id
-
-  tags = { Name = "main-alb" }
-}
-
-resource "aws_lb_target_group" "app" {
-  name     = "app-tg"
-  port     = 8000
-  protocol = "HTTP"
-  vpc_id   = aws_vpc.main.id
-
-  health_check {
-    path                = "/api/database/health"
-    healthy_threshold   = 2
-    unhealthy_threshold = 2
-    timeout             = 5
-    interval            = 30
-    matcher             = "200"
-  }
-
-  tags = { Name = "app-tg" }
-}
-
-resource "aws_lb_listener" "http" {
-  load_balancer_arn = aws_lb.alb.arn
-  port              = 80
-  protocol          = "HTTP"
-
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.app.arn
-  }
-}
+# Load balancer removed - using EC2 directly
 
 # EFS Configuration
 resource "aws_efs_file_system" "efs" {
@@ -398,8 +330,8 @@ resource "aws_launch_template" "app_lt" {
   }
 
   network_interfaces {
-    associate_public_ip_address = false
-    subnet_id                   = aws_subnet.private[0].id
+    associate_public_ip_address = true
+    subnet_id                   = aws_subnet.public[0].id
     security_groups             = [aws_security_group.app.id]
   }
 
@@ -607,7 +539,7 @@ resource "aws_autoscaling_group" "app_asg" {
     version = "$Latest"
   }
 
-  vpc_zone_identifier       = aws_subnet.private[*].id
+  vpc_zone_identifier       = aws_subnet.public[*].id
   health_check_type         = "EC2"
   health_check_grace_period = 600
 
@@ -670,9 +602,13 @@ resource "aws_iam_instance_profile" "ssm_profile" {
 }
 
 # Outputs
-output "alb_dns_name" {
-  description = "URL of the Application Load Balancer"
-  value       = aws_lb.alb.dns_name
+output "instance_info" {
+  description = "Information about the EC2 instances"
+  value = {
+    instance_type = var.instance_type_app
+    port          = 8000
+    note          = "Connect directly to EC2 instances via SSH or SSM"
+  }
 }
 
 output "rds_endpoint" {
