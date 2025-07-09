@@ -2,9 +2,9 @@ services:
   # PostgreSQL Database
   postgres:
     image: postgres:15-alpine
-    container_name: fci-chatbot-postgres
+    container_name: ai-chatbot-postgres
     environment:
-      POSTGRES_DB: fci_chatbot
+      POSTGRES_DB: ai_chatbot
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password1234
     volumes:
@@ -19,13 +19,13 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - fci-network
+      - ai-network
     restart: unless-stopped
 
   # Weaviate Vector Database
   weaviate:
     image: semitechnologies/weaviate:1.25.4
-    container_name: fci-chatbot-weaviate
+    container_name: ai-chatbot-weaviate
     environment:
       QUERY_DEFAULTS_LIMIT: 25
       AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
@@ -45,7 +45,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - fci-network
+      - ai-network
     restart: unless-stopped
 
   # Backend API
@@ -57,14 +57,14 @@ services:
       platforms:
         - linux/amd64  # For cloud VMs
         - linux/arm64  # For M1 Mac
-    container_name: fci-chatbot-backend
+    container_name: ai-chatbot-backend
     env_file:
-      - env.local-dev
+      - .env.dev
     environment:
       # Database Configuration
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_NAME: fci_chatbot
+      DB_NAME: ai_chatbot
       DB_USER: postgres
       DB_PASSWORD: password1234
       
@@ -74,7 +74,7 @@ services:
       # LLM Configuration - Environment-specific
       MODEL_PATH: /models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
       MODEL_TYPE: llama
-      GPU_LAYERS: ${GPU_LAYERS:-0}  # 0 for CPU, higher for GPU
+      GPU_LAYERS: 4  # 4 for Metal GPU acceleration
       CONTEXT_LENGTH: ${CONTEXT_LENGTH:-4096}
       
       # RAG Configuration
@@ -92,10 +92,11 @@ services:
       # Performance Configuration
       MAX_HISTORY_MESSAGES: ${MAX_HISTORY_MESSAGES:-50}
       ENABLE_INTERNET_SEARCH: ${ENABLE_INTERNET_SEARCH:-false}
+      MAX_NEW_TOKENS: ${MAX_NEW_TOKENS:-512}
       
       # Platform-specific optimizations
-      CT_METAL: ${CT_METAL:-0}  # For M1 Mac Metal acceleration
-      CT_CUDA: ${CT_CUDA:-0}    # For CUDA acceleration
+      CT_METAL: 1  # For M1 Mac Metal acceleration
+      CT_CUDA: 0   # For CUDA acceleration
       
       # HuggingFace Cache Configuration
       HF_HOME: /root/.cache/huggingface
@@ -121,7 +122,7 @@ services:
       weaviate:
         condition: service_started
     networks:
-      - fci-network
+      - ai-network
     restart: unless-stopped
     # Resource limits removed for t3.medium compatibility
 
@@ -133,13 +134,13 @@ services:
       platforms:
         - linux/amd64
         - linux/arm64
-    container_name: fci-chatbot-frontend
+    container_name: ai-chatbot-frontend
     ports:
       - "3000:80"
     depends_on:
       - backend
     networks:
-      - fci-network
+      - ai-network
     restart: unless-stopped
     profiles:
       - "frontend"  # Only start if explicitly requested
@@ -155,5 +156,5 @@ volumes:
     driver: local
 
 networks:
-  fci-network:
+  ai-network:
     driver: bridge 
