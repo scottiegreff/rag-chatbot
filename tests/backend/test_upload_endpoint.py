@@ -16,7 +16,7 @@ UPLOAD_ENDPOINT = f"{BASE_URL}/api/upload"
 def create_test_file():
     """Create a test file for uploading."""
     test_content = """
-This is a test document for the FCIAS Chatbot.
+This is a test document for the AI Chatbot.
 
 Key Information:
 - Document Type: Test Policy

@@ -1,6 +1,6 @@
 # Test Directory Structure
 
-This directory contains all test files for the FCI-Chatbot project, organized by type and purpose.
+This directory contains all test files for the AI-Chatbot project, organized by type and purpose.
 
 ## Directory Structure
 

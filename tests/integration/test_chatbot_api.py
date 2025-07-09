@@ -74,7 +74,7 @@ def test_knowledge_questions():
     return results
 
 def main():
-    print("🧪 Testing FCI Chatbot API after container restart...")
+    print("🧪 Testing AI Chatbot API after container restart...")
     print("=" * 60)
     
     # Test 1: Health check
