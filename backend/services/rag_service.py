@@ -40,6 +40,10 @@ ENABLE_INTERNET_SEARCH = os.getenv("ENABLE_INTERNET_SEARCH", "true").lower() == 
 WEAVIATE_URL = os.getenv("WEAVIATE_URL", "http://localhost:8080")
 COLLECTION_NAME = "Documents"
 
+# Embedding model configuration
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "intfloat/e5-small")
+# Available models: intfloat/e5-small, intfloat/e5-large, sentence-transformers/all-MiniLM-L6-v2
+
 def chunk_text(text: str, chunk_size: int = None, overlap: int = None) -> List[str]:
     """Split text into overlapping chunks of chunk_size with overlap."""
     # Use environment variables if not specified
@@ -81,15 +85,17 @@ class RAGService:
         logger.info(f"🔍 RAG service initialized (Weaviate client will connect when needed)")
         
         # Load the embedding model
-        logger.info("🔄 Loading sentence transformer model...")
+        logger.info(f"🔄 Loading embedding model: {EMBEDDING_MODEL}...")
         embedding_start_time = datetime.utcnow()
         # Use CPU by default to avoid GPU/Metal contention with LLM
         device = 'cpu' if RAG_USE_CPU else 'auto'
         if SENTENCE_TRANSFORMERS_AVAILABLE:
-            # Use smaller model for reduced size (80MB vs 438MB)
-            self.embedding_model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2', device=device)
+            # Load the specified embedding model
+            self.embedding_model = SentenceTransformer(EMBEDDING_MODEL, device=device)
+            logger.info(f"✅ Using embedding model: {EMBEDDING_MODEL}")
         else:
             self.embedding_model = None
+            logger.warning("⚠️  sentence-transformers not available, embedding functionality disabled")
         embedding_end_time = datetime.utcnow()
         embedding_duration = (embedding_end_time - embedding_start_time).total_seconds()
         logger.info(f"✅ Embedding model loaded in {embedding_duration:.2f} seconds ({device} mode)")
@@ -322,8 +328,8 @@ class RAGService:
             search_duration = (search_end_time - search_start_time).total_seconds() * 1000
             logger.info(f"🔎 Vector search completed in {search_duration:.2f}ms")
             
-            # Always return the objects from the QueryReturn
-            return results.objects
+            # Weaviate v4 returns a list of GenerativeObject directly
+            return results
         except Exception as e:
             logger.error(f"Error querying documents: {e}")
             raise
@@ -468,7 +474,7 @@ class RAGService:
             logger.info(f"🔍 Performing local RAG search for: {query}")
             local_results = self.query_documents(query, n_results=n_local_results)
             results['local_results'] = local_results
-            logger.info(f"✅ Found {len(local_results.objects) if hasattr(local_results, 'objects') else 0} local results")
+            logger.info(f"✅ Found {len(local_results) if isinstance(local_results, list) else 0} local results")
         except Exception as e:
             logger.error(f"❌ Local RAG search failed: {e}")
             results['local_results'] = {'documents': [], 'metadatas': [], 'ids': []}
@@ -558,9 +564,9 @@ class RAGService:
             
             # Add local document context
             local_results = hybrid_results.get('local_results')
-            if local_results and hasattr(local_results, 'objects') and local_results.objects:
+            if local_results and isinstance(local_results, list) and len(local_results) > 0:
                 context_parts.append("📄 Relevant Documents:")
-                for i, obj in enumerate(local_results.objects, 1):
+                for i, obj in enumerate(local_results, 1):
                     content = obj.properties.get('content', '') if hasattr(obj, 'properties') else ''
                     source = obj.properties.get('source', 'Unknown') if hasattr(obj, 'properties') else 'Unknown'
                     source_info = f" (Source: {source})" if source != 'Unknown' else ""

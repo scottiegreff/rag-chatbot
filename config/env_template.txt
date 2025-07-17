@@ -1,0 +1,39 @@
+# Database Configuration
+DB_HOST=postgres
+DB_PORT=5432
+DB_NAME=ai_chatbot
+DB_USER=postgres
+DB_PASSWORD=password1234
+
+# Weaviate Configuration
+WEAVIATE_URL=http://weaviate:8080
+
+# LLM Configuration
+MODEL_PATH=./models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
+MODEL_TYPE=llama
+GPU_LAYERS=0
+CONTEXT_LENGTH=2048
+
+# RAG Configuration
+ENABLE_RAG=true
+RAG_USE_CPU=true
+CHUNK_SIZE=500
+OVERLAP=50
+# Embedding model: intfloat/e5-small (fast, 134MB), intfloat/e5-large (accurate, 438MB), sentence-transformers/all-MiniLM-L6-v2 (balanced, 80MB)
+EMBEDDING_MODEL=intfloat/e5-small
+
+# API Configuration
+HOST=0.0.0.0
+PORT=8010
+DEBUG=false
+CORS_ORIGINS=*
+
+# Performance Configuration
+MAX_HISTORY_MESSAGES=50
+RAG_CONTEXT_MESSAGES=10
+ENABLE_INTERNET_SEARCH=false
+MAX_NEW_TOKENS=1024
+
+# Platform-specific optimizations
+CT_METAL=0
+CT_CUDA=0 

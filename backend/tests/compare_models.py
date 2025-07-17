@@ -7,7 +7,7 @@ import requests
 import time
 from datetime import datetime
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = "http://localhost:8010"
 
 def test_question(question, session_id, timeout=180):
     """Test a single question and return the result."""

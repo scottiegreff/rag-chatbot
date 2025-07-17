@@ -2,7 +2,7 @@
 """
 PostgreSQL Database Setup Utility
 
-This script helps set up the PostgreSQL database for the FCI Chatbot.
+This script helps set up the PostgreSQL database for the AI Chatbot.
 It will create the database if it doesn't exist and initialize the tables.
 """
 
@@ -26,7 +26,7 @@ def create_database_if_not_exists():
     # Get database configuration
     db_host = os.getenv("DB_HOST", "postgres")
     db_port = os.getenv("DB_PORT", "5432")
-    db_name = os.getenv("DB_NAME", "fci_chatbot")
+    db_name = os.getenv("DB_NAME", "ai_chatbot")
     db_user = os.getenv("DB_USER", "postgres")
     db_password = os.getenv("DB_PASSWORD", "")
     
@@ -81,7 +81,7 @@ def test_connection():
 
 def main():
     """Main setup function"""
-    print("PostgreSQL Database Setup for FCI Chatbot")
+    print("PostgreSQL Database Setup for AI Chatbot")
     print("=" * 50)
     
     # Step 1: Create database if it doesn't exist

@@ -1,7 +1,7 @@
 # Oracle Cloud Infrastructure (OCI) Deployment Guide
 
 ## Overview
-This guide covers deploying the FCI Chatbot on Oracle Cloud Infrastructure with Apache Tomcat and WebLogic environments.
+This guide covers deploying the AI Chatbot on Oracle Cloud Infrastructure with Apache Tomcat and WebLogic environments.
 
 ## Architecture Options
 
@@ -18,7 +18,7 @@ Deploy the FastAPI backend as a standalone Python service running alongside your
 ```
 OCI Instance:
 ├── WebLogic/Tomcat (Port 8080) - Your existing Java apps
-├── FastAPI Backend (Port 8000) - FCI Chatbot API
+├── FastAPI Backend (Port 8010) - AI Chatbot API
 ├── PostgreSQL Database (Port 5432)
 └── Nginx Reverse Proxy (Port 80/443) - Routes traffic
 ```
@@ -80,9 +80,9 @@ sudo systemctl start postgresql
 sudo -u postgres psql
 
 # Create database and user
-CREATE DATABASE fci_chatbot;
-CREATE USER fci_user WITH PASSWORD 'your_secure_password';
-GRANT ALL PRIVILEGES ON DATABASE fci_chatbot TO fci_user;
+CREATE DATABASE ai_chatbot;
+CREATE USER ai_user WITH PASSWORD 'your_secure_password';
+GRANT ALL PRIVILEGES ON DATABASE ai_chatbot TO ai_user;
 \q
 
 # Configure PostgreSQL for remote connections
@@ -90,7 +90,7 @@ sudo nano /var/lib/pgsql/data/postgresql.conf
 # Add: listen_addresses = '*'
 
 sudo nano /var/lib/pgsql/data/pg_hba.conf
-# Add: host fci_chatbot fci_user 0.0.0.0/0 md5
+# Add: host ai_chatbot ai_user 0.0.0.0/0 md5
 
 sudo systemctl restart postgresql
 ```
@@ -99,9 +99,9 @@ sudo systemctl restart postgresql
 ```bash
 # Clone your application
 cd /opt
-sudo git clone <your-repo-url> fci-chatbot
-sudo chown -R $USER:$USER fci-chatbot
-cd fci-chatbot
+sudo git clone <your-repo-url> ai-chatbot
+sudo chown -R $USER:$USER ai-chatbot
+cd ai-chatbot
 
 # Create virtual environment
 python3 -m venv venv
@@ -112,9 +112,9 @@ pip install -r requirements.txt
 pip install ctransformers weaviate-client sentence-transformers PyPDF2 python-docx
 
 # Create application directories
-mkdir -p /opt/fci-chatbot/models
-mkdir -p /opt/fci-chatbot/weaviate_data
-mkdir -p /opt/fci-chatbot/logs
+mkdir -p /opt/ai-chatbot/models
+mkdir -p /opt/ai-chatbot/weaviate_data
+mkdir -p /opt/ai-chatbot/logs
 ```
 
 #### Step 5: Configure Environment
@@ -129,12 +129,12 @@ nano .env
 # Database Configuration
 DB_HOST=postgres
 DB_PORT=5432
-DB_NAME=fci_chatbot
+DB_NAME=ai_chatbot
 DB_USER=postgres
 DB_PASSWORD=your_secure_password
 
 # LLM Configuration
-MODEL_PATH=/opt/fci-chatbot/models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
+MODEL_PATH=/opt/ai-chatbot/models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
 MODEL_TYPE=llama
 GPU_LAYERS=0
 CONTEXT_LENGTH=2048
@@ -148,7 +148,7 @@ OVERLAP=50
 
 # API Configuration
 HOST=0.0.0.0
-PORT=8000
+PORT=8010
 DEBUG=false
 CORS_ORIGINS=*
 
@@ -160,22 +160,22 @@ ENABLE_INTERNET_SEARCH=false
 
 #### Step 6: Setup Systemd Service
 ```bash
-sudo nano /etc/systemd/system/fci-chatbot.service
+sudo nano /etc/systemd/system/ai-chatbot.service
 ```
 
 **Service Configuration:**
 ```ini
 [Unit]
-Description=FCI Chatbot FastAPI Application
+Description=AI Chatbot FastAPI Application
 After=network.target postgresql.service
 
 [Service]
 Type=simple
-User=fci-user
-Group=fci-user
-WorkingDirectory=/opt/fci-chatbot
-Environment=PATH=/opt/fci-chatbot/venv/bin
-ExecStart=/opt/fci-chatbot/venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8000
+User=ai-user
+Group=ai-user
+WorkingDirectory=/opt/ai-chatbot
+Environment=PATH=/opt/ai-chatbot/venv/bin
+ExecStart=/opt/ai-chatbot/venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8010
 Restart=always
 RestartSec=10
 
@@ -185,13 +185,13 @@ WantedBy=multi-user.target
 
 ```bash
 # Create service user
-sudo useradd -r -s /bin/false fci-user
-sudo chown -R fci-user:fci-user /opt/fci-chatbot
+sudo useradd -r -s /bin/false ai-user
+sudo chown -R ai-user:ai-user /opt/ai-chatbot
 
 # Enable and start service
 sudo systemctl daemon-reload
-sudo systemctl enable fci-chatbot
-sudo systemctl start fci-chatbot
+sudo systemctl enable ai-chatbot
+sudo systemctl start ai-chatbot
 ```
 
 #### Step 7: Configure Nginx Reverse Proxy
@@ -202,7 +202,7 @@ sudo yum install -y nginx  # Oracle Linux
 sudo apt install -y nginx  # Ubuntu
 
 # Configure Nginx
-sudo nano /etc/nginx/conf.d/fci-chatbot.conf
+sudo nano /etc/nginx/conf.d/ai-chatbot.conf
 ```
 
 **Nginx Configuration:**
@@ -213,14 +213,14 @@ server {
 
     # Frontend static files
     location / {
-        root /opt/fci-chatbot/frontend;
+        root /opt/ai-chatbot/frontend;
         index index.html;
         try_files $uri $uri/ /index.html;
     }
 
     # API proxy
     location /api/ {
-        proxy_pass http://localhost:8000;
+        proxy_pass http://localhost:8010;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -237,7 +237,7 @@ server {
 
     # Static files
     location /static/ {
-        alias /opt/fci-chatbot/frontend/static/;
+        alias /opt/ai-chatbot/frontend/static/;
         expires 1y;
         add_header Cache-Control "public, immutable";
     }
@@ -256,13 +256,13 @@ sudo systemctl restart nginx
 # Oracle Linux
 sudo firewall-cmd --permanent --add-service=http
 sudo firewall-cmd --permanent --add-service=https
-sudo firewall-cmd --permanent --add-port=8000/tcp
+sudo firewall-cmd --permanent --add-port=8010/tcp
 sudo firewall-cmd --reload
 
 # Ubuntu
 sudo ufw allow 80
 sudo ufw allow 443
-sudo ufw allow 8000
+sudo ufw allow 8010
 sudo ufw enable
 ```
 
@@ -270,7 +270,7 @@ sudo ufw enable
 
 #### Option A: Separate Ports (Recommended)
 - WebLogic/Tomcat: Port 8080 (existing applications)
-- FCI Chatbot: Port 8000 (new application)
+- AI Chatbot: Port 8010 (new application)
 - Nginx: Port 80 (routes traffic)
 
 #### Option B: Subdomain Routing
@@ -282,11 +282,11 @@ server {
     proxy_pass http://localhost:8080;
 }
 
-# FCI Chatbot
+# AI Chatbot
 server {
     listen 80;
     server_name chatbot.your-domain.com;
-    # ... FCI chatbot configuration
+    # ... AI chatbot configuration
 }
 ```
 
@@ -301,9 +301,9 @@ server {
         proxy_pass http://localhost:8080;
     }
 
-    # FCI Chatbot
+    # AI Chatbot
     location /chatbot/ {
-        proxy_pass http://localhost:8000/;
+        proxy_pass http://localhost:8010/;
     }
 }
 ```
@@ -312,20 +312,20 @@ server {
 
 #### Setup Log Rotation
 ```bash
-sudo nano /etc/logrotate.d/fci-chatbot
+sudo nano /etc/logrotate.d/ai-chatbot
 ```
 
 ```conf
-/opt/fci-chatbot/logs/*.log {
+/opt/ai-chatbot/logs/*.log {
     daily
     missingok
     rotate 30
     compress
     delaycompress
     notifempty
-    create 644 fci-user fci-user
+    create 644 ai-user ai-user
     postrotate
-        systemctl reload fci-chatbot
+        systemctl reload ai-chatbot
     endscript
 }
 ```
@@ -338,16 +338,16 @@ sudo yum install -y htop iotop  # Oracle Linux
 sudo apt install -y htop iotop  # Ubuntu
 
 # Create monitoring script
-nano /opt/fci-chatbot/monitor.sh
+nano /opt/ai-chatbot/monitor.sh
 ```
 
 ```bash
 #!/bin/bash
-# Monitor script for FCI Chatbot
+# Monitor script for AI Chatbot
 
-echo "=== FCI Chatbot Status ==="
+echo "=== AI Chatbot Status ==="
 echo "Service Status:"
-systemctl status fci-chatbot --no-pager
+systemctl status ai-chatbot --no-pager
 
 echo -e "\nMemory Usage:"
 free -h
@@ -356,7 +356,7 @@ echo -e "\nDisk Usage:"
 df -h
 
 echo -e "\nRecent Logs:"
-tail -20 /opt/fci-chatbot/logs/app.log
+tail -20 /opt/ai-chatbot/logs/app.log
 ```
 
 ### 5. Security Considerations
@@ -392,7 +392,7 @@ sudo systemctl start fail2ban
 #### Database Backup
 ```bash
 # Create backup script
-nano /opt/fci-chatbot/backup.sh
+nano /opt/ai-chatbot/backup.sh
 ```
 
 ```bash
@@ -404,10 +404,10 @@ DATE=$(date +%Y%m%d_%H%M%S)
 mkdir -p $BACKUP_DIR
 
 # Backup database
-pg_dump -h localhost -U fci_user fci_chatbot > $BACKUP_DIR/db_backup_$DATE.sql
+pg_dump -h localhost -U ai_user ai_chatbot > $BACKUP_DIR/db_backup_$DATE.sql
 
 # Backup application data
-tar -czf $BACKUP_DIR/app_backup_$DATE.tar.gz /opt/fci-chatbot/weaviate_data /opt/fci-chatbot/models
+tar -czf $BACKUP_DIR/app_backup_$DATE.tar.gz /opt/ai-chatbot/weaviate_data /opt/ai-chatbot/models
 
 # Keep only last 7 days of backups
 find $BACKUP_DIR -name "*.sql" -mtime +7 -delete
@@ -416,9 +416,9 @@ find $BACKUP_DIR -name "*.tar.gz" -mtime +7 -delete
 
 ```bash
 # Make executable and add to crontab
-chmod +x /opt/fci-chatbot/backup.sh
+chmod +x /opt/ai-chatbot/backup.sh
 crontab -e
-# Add: 0 2 * * * /opt/fci-chatbot/backup.sh
+# Add: 0 2 * * * /opt/ai-chatbot/backup.sh
 ```
 
 ### 7. Troubleshooting
@@ -428,16 +428,16 @@ crontab -e
 **1. Service won't start:**
 ```bash
 # Check logs
-sudo journalctl -u fci-chatbot -f
+sudo journalctl -u ai-chatbot -f
 
 # Check permissions
-ls -la /opt/fci-chatbot/
+ls -la /opt/ai-chatbot/
 ```
 
 **2. Database connection issues:**
 ```bash
 # Test database connection
-psql -h localhost -U fci_user -d fci_chatbot
+psql -h localhost -U ai_user -d ai_chatbot
 
 # Check PostgreSQL logs
 sudo tail -f /var/log/postgresql/postgresql-*.log
@@ -446,7 +446,7 @@ sudo tail -f /var/log/postgresql/postgresql-*.log
 **3. Model loading issues:**
 ```bash
 # Check model file exists
-ls -la /opt/fci-chatbot/models/
+ls -la /opt/ai-chatbot/models/
 
 # Check disk space
 df -h

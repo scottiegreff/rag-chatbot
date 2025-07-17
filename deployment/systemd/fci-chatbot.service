@@ -1,12 +1,12 @@
 [Unit]
-Description=FCI Chatbot Service
+Description=AI Chatbot Service
 After=docker.service
 Requires=docker.service
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-WorkingDirectory=/opt/fci-chatbot
+WorkingDirectory=/opt/ai-chatbot
 ExecStart=/usr/bin/docker-compose up -d
 ExecStop=/usr/bin/docker-compose down
 TimeoutStartSec=0
@@ -18,7 +18,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/opt/fci-chatbot /opt/fci-chatbot/logs
+ReadWritePaths=/opt/ai-chatbot /opt/ai-chatbot/logs
 
 # Restart policy
 Restart=on-failure

@@ -6,7 +6,7 @@ Simple test script for Mistral 7B model - single question test.
 import requests
 import time
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = "http://localhost:8010"
 
 def test_simple_question():
     """Test a simple question with the 7B model."""

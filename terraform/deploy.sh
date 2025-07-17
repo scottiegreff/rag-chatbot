@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# FCI Chatbot AWS Deployment Script
+# AI Chatbot AWS Deployment Script
 # This script automates the initial deployment process
 
 set -e
 
-echo "🚀 Starting FCI Chatbot AWS Deployment..."
+echo "🚀 Starting AI Chatbot AWS Deployment..."
 
 # Colors for output
 RED='\033[0;31m'
@@ -135,7 +135,7 @@ get_outputs() {
 # Main deployment function
 main() {
     echo "=========================================="
-    echo "FCI Chatbot AWS Deployment"
+    echo "AI Chatbot AWS Deployment"
     echo "=========================================="
     echo ""
     

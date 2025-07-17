@@ -1,0 +1,106 @@
+# AI Chatbot Performance Optimization Tracker
+
+## 🎯 Current Performance Baseline (Before Optimization)
+
+**Test Query**: "What is the total revenue from the orders?"
+**Total Response Time**: 157.9 seconds (2.6 minutes) ⚠️ CRITICAL
+
+### 📊 Detailed Timing Breakdown
+
+| Component | Time (ms) | Percentage | Status |
+|-----------|-----------|------------|---------|
+| **LangChain SQL Agent** | 60,650 | 38.4% | 🚨 CRITICAL BOTTLENECK |
+| **LLM Token Generation** | 16,486 | 10.4% | 🚨 CRITICAL BOTTLENECK |
+| **RAG Context Retrieval** | 627 | 0.4% | ✅ Good |
+| **Database Operations** | 23.6 | 0.01% | ✅ Excellent |
+| **Other Processing** | 80,113 | 50.7% | ⚠️ Needs Investigation |
+
+### 🚨 Critical Issues Identified
+
+1. **LangChain SQL Agent Timeout**: 60+ seconds, then fails with parsing error
+2. **LLM Token Generation**: 0.73 tokens/second (extremely slow)
+3. **First Token Latency**: 15.3 seconds (unacceptable)
+4. **System Falls Back to Manual Queries**: Due to LangChain failures
+
+### 🎯 Optimization Goals
+
+- [ ] Reduce total response time to < 10 seconds
+- [ ] Fix LangChain SQL Agent (reduce timeout, improve error handling)
+- [ ] Optimize LLM performance (GPU acceleration, model parameters)
+- [ ] Implement caching for common queries
+- [ ] Consider alternative SQL generation approaches
+
+### 📈 Progress Tracking
+
+#### Phase 1: LangChain SQL Agent Optimization ✅ IN PROGRESS
+- [x] Reduce timeout from 60s to 15s
+- [x] Fix parsing error handling in LLMServiceWrapper
+- [x] Remove fallback dependencies (force agent to work)
+- [x] Optimize agent configuration (max_iterations: 5→3)
+- [ ] Test performance improvement
+- [ ] Add better error handling for specific query types
+
+#### Phase 2: LLM Performance Optimization
+- [ ] Verify GPU/Metal acceleration
+- [ ] Optimize model parameters
+- [ ] Consider smaller/faster model
+- [ ] Test token generation speed
+
+#### Phase 3: System-wide Optimizations
+- [ ] Implement query caching
+- [ ] Optimize RAG pipeline
+- [ ] Reduce database queries
+- [ ] Frontend performance improvements
+
+### 🔧 Recent Changes (Phase 1)
+
+**LangChain SQL Agent Improvements:**
+1. **Timeout Reduction**: 60s → 15s (faster failure detection)
+2. **LLMServiceWrapper Fix**: Returns proper SQL agent responses instead of error messages
+3. **Agent Configuration**: max_iterations reduced from 5 to 3
+4. **Fallback Removal**: No longer depends on manual fallback queries
+5. **Better Error Handling**: Specific error messages for timeouts and failures
+
+**Test Results (Phase 1):**
+- **LangChain SQL Agent**: ✅ 60.6s → 15.8s (74% improvement!)
+- **Timeout**: ✅ Working correctly (15s vs 60s)
+- **Parsing Errors**: ✅ Eliminated
+- **LLM Performance**: ❌ 16.5s → 96.4s (484% degradation)
+- **Overall**: ❌ 157.9s → 194.3s (23% slower due to LLM issues)
+
+**Root Cause**: LangChain optimizations worked, but LLM performance degraded significantly.
+
+**Phase 1.5: Model Switch (COMPLETED)**
+- **Issue Identified**: System switched from TinyLlama 1.1B to Mistral 7B due to .env vs env.local-dev conflict
+- **Solution Applied**: Switched to `env.local-dev` to use TinyLlama 1.1B again
+- **Expected Impact**: Restore fast LLM performance while keeping LangChain optimizations
+
+**Test Results (Phase 1.5):**
+- **LangChain SQL Agent**: ✅ 60.6s → 16.0s (74% improvement!)
+- **Pre-LLM Processing**: ✅ 60.6s → 16.4s (73% improvement!)
+- **LLM Performance**: ❌ 16.5s → 95.0s (476% degradation - still bad!)
+- **Overall**: ❌ 157.9s → 208.5s (32% slower due to LLM issues)
+
+**Root Cause**: Even TinyLlama 1.1B is performing poorly, suggesting deeper LLM configuration issues.
+
+### 🎯 Next Steps (Phase 2 Priority)
+
+**Immediate Focus: LLM Performance Investigation**
+1. **Check GPU/Metal acceleration**: Verify if hardware acceleration is working in Docker
+2. **Optimize model parameters**: Reduce context length, adjust generation params
+3. **Check resource limits**: Docker container might be resource-constrained
+4. **Model loading optimization**: Check if model is loaded optimally
+5. **Alternative models**: Consider even smaller models or different quantization
+
+**Expected Impact**: Fix LLM performance to achieve < 10s total response time
+
+### 📝 Notes
+
+- Current system is using TinyLlama 1.1B model
+- LangChain SQL Agent is the primary bottleneck
+- Manual fallback queries work correctly but are slow to trigger
+- RAG and database operations are performing well
+
+---
+**Last Updated**: $(date)
+**Status**: Phase 1 optimizations implemented, ready for testing 

@@ -1,15 +1,15 @@
 #!/bin/bash
 
-# FCI Chatbot Deployment Script for Oracle Cloud
+# AI Chatbot Deployment Script for Oracle Cloud
 # This script deploys the application on Oracle Cloud Infrastructure
 
 set -e
 
 # Configuration
-APP_NAME="fci-chatbot"
-APP_DIR="/opt/fci-chatbot"
-BACKUP_DIR="/opt/fci-chatbot/backups"
-LOG_DIR="/opt/fci-chatbot/logs"
+APP_NAME="ai-chatbot"
+APP_DIR="/opt/ai-chatbot"
+BACKUP_DIR="/opt/ai-chatbot/backups"
+LOG_DIR="/opt/ai-chatbot/logs"
 DATE=$(date +"%Y%m%d_%H%M%S")
 
 # Colors for output
@@ -116,7 +116,7 @@ setup_repository() {
         print_success "Repository updated"
     else
         # Clone repository (replace with actual repository URL)
-        git clone https://github.com/your-username/FCI-Chatbot.git "$APP_DIR"
+        git clone https://github.com/your-username/ai-chatbot.git "$APP_DIR"
         print_success "Repository cloned"
     fi
 }
@@ -147,8 +147,8 @@ install_python_deps() {
     cd "$APP_DIR"
     
     # Create virtual environment
-    python3 -m venv venv
-    source venv/bin/activate
+    python3 -m venv venv-py311
+    source venv-py311/bin/activate
     
     # Install dependencies
     pip install --upgrade pip
@@ -169,9 +169,9 @@ setup_postgres() {
     systemctl enable postgresql
     
     # Create database and user
-    sudo -u postgres psql -c "CREATE DATABASE fci_chatbot;"
+    sudo -u postgres psql -c "CREATE DATABASE ai_chatbot;"
     sudo -u postgres psql -c "CREATE USER postgres WITH PASSWORD 'postgres_password';"
-    sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE fci_chatbot TO postgres;"
+    sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE ai_chatbot TO postgres;"
     
     print_success "PostgreSQL setup complete"
 }
@@ -209,10 +209,10 @@ setup_nginx() {
     print_info "Setting up Nginx..."
     
     # Copy Nginx configuration
-    cp "$APP_DIR/deployment/nginx/fci-chatbot.conf" /etc/nginx/sites-available/fci-chatbot
+    cp "$APP_DIR/deployment/nginx/ai-chatbot.conf" /etc/nginx/sites-available/ai-chatbot
     
     # Enable site
-    ln -sf /etc/nginx/sites-available/fci-chatbot /etc/nginx/sites-enabled/
+    ln -sf /etc/nginx/sites-available/ai-chatbot /etc/nginx/sites-enabled/
     
     # Remove default site
     rm -f /etc/nginx/sites-enabled/default
@@ -232,13 +232,13 @@ setup_systemd() {
     print_info "Setting up systemd service..."
     
     # Copy service file
-    cp "$APP_DIR/deployment/systemd/fci-chatbot.service" /etc/systemd/system/
+    cp "$APP_DIR/deployment/systemd/ai-chatbot.service" /etc/systemd/system/
     
     # Reload systemd
     systemctl daemon-reload
     
     # Enable service
-    systemctl enable fci-chatbot
+    systemctl enable ai-chatbot
     
     print_success "Systemd service setup complete"
 }
@@ -251,7 +251,7 @@ create_backup() {
     
     # Backup PostgreSQL
     if systemctl is-active --quiet postgresql; then
-        sudo -u postgres pg_dump fci_chatbot > "$BACKUP_DIR/postgres_backup_$DATE.sql"
+        sudo -u postgres pg_dump ai_chatbot > "$BACKUP_DIR/postgres_backup_$DATE.sql"
         print_success "PostgreSQL backed up"
     else
         print_warning "PostgreSQL not running, skipping backup"
@@ -315,7 +315,7 @@ show_status() {
     echo "System services:"
     systemctl status nginx --no-pager -l
     systemctl status postgresql --no-pager -l
-    systemctl status fci-chatbot --no-pager -l
+    systemctl status ai-chatbot --no-pager -l
     
     echo ""
     echo "Resource usage:"

@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 
 # Configuration
-BASE_URL = "http://localhost:8000"
+BASE_URL = "http://localhost:8010"
 UPLOAD_ENDPOINT = f"{BASE_URL}/api/upload"
 
 def create_test_file():
@@ -108,7 +108,7 @@ Who should I contact for questions?"""
                 print(f"Error: {response.text}")
                 
     except requests.exceptions.ConnectionError:
-        print("❌ Connection Error: Make sure the backend server is running on localhost:8000")
+        print("❌ Connection Error: Make sure the backend server is running on localhost:8010")
     except Exception as e:
         print(f"❌ Error: {e}")
     finally:

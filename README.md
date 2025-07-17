@@ -1,4 +1,4 @@
-# FCI Chatbot
+# AI Chatbot
 
 A FastAPI-based chatbot with RAG (Retrieval-Augmented Generation) capabilities, built with Python and modern AI technologies.
 
@@ -19,7 +19,7 @@ A FastAPI-based chatbot with RAG (Retrieval-Augmented Generation) capabilities, 
 ## Project Structure
 
 ```
-FCI-Chatbot/
+ai-chatbot/
 ├── backend/                 # FastAPI backend application
 │   ├── models/             # Database models
 │   ├── routes/             # API endpoints
@@ -48,13 +48,13 @@ FCI-Chatbot/
 1. **Clone the repository:**
    ```bash
    git clone <repository-url>
-   cd FCI-Chatbot
+   cd ai-chatbot
    ```
 
 2. **Create and activate conda environment:**
    ```bash
-   conda create -n fcias-chatbot python=3.9
-   conda activate fcias-chatbot
+   conda create -n ai-chatbot python=3.9
+conda activate ai-chatbot
    ```
 
 3. **Install Python dependencies:**
@@ -86,12 +86,12 @@ FCI-Chatbot/
 6. **Start the backend:**
    ```bash
    cd backend
-   PYTHONPATH=.. python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
+   PYTHONPATH=.. python -m uvicorn main:app --reload --host 0.0.0.0 --port 8010
    ```
 
 7. **Access the application:**
-   - Web UI: http://localhost:8000/
-   - API Documentation: http://localhost:8000/docs
+   - Web UI: http://localhost:8010/
+   - API Documentation: http://localhost:8010/docs
 
 ### Manual Setup
 
@@ -113,7 +113,7 @@ FCI-Chatbot/
 4. **Run the application:**
    ```bash
    cd backend
-   PYTHONPATH=.. python -m uvicorn main:app --reload
+   PYTHONPATH=.. python -m uvicorn main:app --reload --host 0.0.0.0 --port 8010
    ```
 
 ## Configuration
@@ -222,21 +222,21 @@ FCI-Chatbot/
 ### Environment Setup
 ```bash
 # Ensure you're in the correct environment
-conda activate fcias-chatbot
+conda activate ai-chatbot
 
 # Install missing dependencies
 pip install psycopg2-binary
 
 # Start backend with correct Python path
 cd backend
-PYTHONPATH=.. python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
+PYTHONPATH=.. python -m uvicorn main:app --reload --host 0.0.0.0 --port 8010
 ```
 
 ## Example Usage
 
 ### Upload a Document
 ```bash
-curl -X POST http://localhost:8000/api/upload \
+curl -X POST http://localhost:8010/api/upload \
   -F "file=@document.pdf" \
   -F "title=Company Policy" \
   -F "category=Human Resources" \
@@ -247,14 +247,14 @@ curl -X POST http://localhost:8000/api/upload \
 
 ### Chat with RAG Context
 ```bash
-curl -X POST http://localhost:8000/api/chat/stream \
+curl -X POST http://localhost:8010/api/chat/stream \
   -H "Content-Type: application/json" \
   -d '{"message": "What are the company policies regarding vacation time?"}'
 ```
 
 ### Get Available Categories
 ```bash
-curl http://localhost:8000/api/categories
+curl http://localhost:8010/api/categories
 ```
 
 ## Development
@@ -289,6 +289,6 @@ If you are running both a native and Dockerized PostgreSQL, and you mapped Docke
 |-----------|--------------|
 | Host      | localhost    |
 | Port      | 5433         |
-| Database  | fci_chatbot  |
+| Database  | ai_chatbot  |
 | Username  | postgres     |
 | Password  | password1234 |

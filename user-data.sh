@@ -27,8 +27,8 @@ chmod +x /usr/local/bin/docker-compose
 apt-get install -y git
 
 # Create application directory
-mkdir -p /opt/fci-chatbot
-cd /opt/fci-chatbot
+mkdir -p /opt/ai-chatbot
+cd /opt/ai-chatbot
 
 # Clone repository (replace with your actual repo)
 git clone https://github.com/scottiegreff/rag-chatbot.git .
@@ -44,16 +44,16 @@ fi
 docker-compose -f docker-compose.yml -f docker-compose.aws-gpu.yml up -d
 
 # Create systemd service for auto-start
-cat > /etc/systemd/system/fci-chatbot.service << 'SERVICE_EOF'
+cat > /etc/systemd/system/ai-chatbot.service << 'SERVICE_EOF'
 [Unit]
-Description=FCI Chatbot
+Description=AI Chatbot
 After=docker.service
 Requires=docker.service
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-WorkingDirectory=/opt/fci-chatbot
+WorkingDirectory=/opt/ai-chatbot
 ExecStart=/usr/local/bin/docker-compose -f docker-compose.yml -f docker-compose.aws-gpu.yml up -d
 ExecStop=/usr/local/bin/docker-compose -f docker-compose.yml -f docker-compose.aws-gpu.yml down
 TimeoutStartSec=0
@@ -62,5 +62,5 @@ TimeoutStartSec=0
 WantedBy=multi-user.target
 SERVICE_EOF
 
-systemctl enable fci-chatbot.service
-systemctl start fci-chatbot.service
+systemctl enable ai-chatbot.service
+systemctl start ai-chatbot.service

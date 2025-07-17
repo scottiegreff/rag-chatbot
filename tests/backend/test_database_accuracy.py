@@ -206,7 +206,7 @@ class TestDatabaseAccuracy:
         try:
             # Get actual total from database
             with self.engine.connect() as conn:
-                result = conn.execute(text("SELECT SUM(total_amount) FROM orders"))
+                result = conn.execute(text("SELECT SUM(total) FROM orders"))
                 actual_total = result.fetchone()[0] or 0
             
             # Get total from fallback query
@@ -223,7 +223,7 @@ class TestDatabaseAccuracy:
             fallback_amount = float(amount_match.group(1).replace(',', ''))
             
             # Compare amounts (allow small difference for rounding)
-            assert abs(fallback_amount - actual_total) < 0.01, f"Amount mismatch: fallback=${fallback_amount}, actual=${actual_total}"
+            assert abs(fallback_amount - float(actual_total)) < 0.01, f"Amount mismatch: fallback=${fallback_amount}, actual=${actual_total}"
             
             print(f"✅ Revenue calculation accuracy verified: ${actual_total:,.2f}")
             return actual_total
@@ -267,8 +267,8 @@ class TestDatabaseAccuracy:
                 
                 # Verify required columns exist
                 required_customer_cols = ['id', 'first_name', 'last_name', 'email']
-                required_order_cols = ['id', 'customer_id', 'total_amount', 'order_date']
-                required_product_cols = ['id', 'name', 'price', 'category']
+                required_order_cols = ['id', 'customer_id', 'total', 'order_date']
+                required_product_cols = ['id', 'name', 'price', 'category_id']
                 
                 customer_col_names = [col[0] for col in customer_columns]
                 order_col_names = [col[0] for col in order_columns]
@@ -305,7 +305,7 @@ class TestDatabaseAccuracy:
                 # Check orders data quality
                 result = conn.execute(text("""
                     SELECT COUNT(*) as total,
-                           COUNT(CASE WHEN total_amount > 0 THEN 1 END) as positive_amounts,
+                           COUNT(CASE WHEN total > 0 THEN 1 END) as positive_amounts,
                            COUNT(CASE WHEN order_date IS NOT NULL THEN 1 END) as valid_dates
                     FROM orders
                 """))
@@ -331,6 +331,7 @@ def run_database_accuracy_tests():
     print("=" * 50)
     
     test_instance = TestDatabaseAccuracy()
+    test_instance.setup_method()  # Manually call setup_method since we're not using pytest
     
     try:
         # Test database connection

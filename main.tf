@@ -1,130 +1,27 @@
+# main.tf
+
 terraform {
   required_version = ">= 1.0"
+  
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
 
- backend "s3" {
-    bucket         = "my-tfstate-bucket-12345"
+  # Backend configuration should be static or passed via CLI
+  backend "s3" {
+    bucket         = "my-tfstate-bucket-12345"  # Static value
     key            = "terraform/main.tfstate"
-    region         = "ca-central-1"
-    dynamodb_table = "terraform-lock"
+    region         = "ca-central-1"             # Static value
+    dynamodb_table = "terraform-lock"           # Static value
     encrypt        = true
   }
 }
 
 provider "aws" {
   region = var.region
-}
-
-# Variables
-variable "region" {
-  description = "AWS region"
-  type        = string
-  default     = "ca-central-1"
-}
-
-variable "state_bucket" {
-  description = "S3 bucket for Terraform state"
-  type        = string
-}
-
-variable "state_table" {
-  description = "DynamoDB table for state locking"
-  type        = string
-  default     = "terraform-lock"
-}
-
-variable "vpc_cidr" {
-  description = "VPC CIDR block"
-  type        = string
-  default     = "10.0.0.0/16"
-}
-
-variable "public_subnet_cidrs" {
-  description = "List of public subnet CIDRs"
-  type        = list(string)
-  default     = ["10.0.1.0/24", "10.0.2.0/24"]
-}
-
-variable "private_subnet_cidrs" {
-  description = "List of private subnet CIDRs"
-  type        = list(string)
-  default     = ["10.0.3.0/24", "10.0.4.0/24"]
-}
-
-variable "availability_zones" {
-  description = "AZs to deploy into"
-  type        = list(string)
-  default     = ["ca-central-1a", "ca-central-1b"]
-}
-
-variable "nat_az" {
-  description = "AZ for NAT Gateway"
-  type        = string
-  default     = "ca-central-1a"
-}
-
-variable "instance_type_app" {
-  description = "EC2 instance type for app servers"
-  type        = string
-  default     = "t3.medium"
-}
-
-variable "key_name" {
-  description = "Key pair name for SSH access"
-  type        = string
-  default     = "scotts-keypair"
-}
-
-variable "allowed_ssh_cidr" {
-  description = "CIDR block for SSH access"
-  type        = string
-  default     = "24.80.179.233/32"
-}
-
-variable "certificate_arn" {
-  description = "ACM certificate ARN for HTTPS listener"
-  type        = string
-}
-
-variable "db_password" {
-  description = "Password for Postgres admin user"
-  type        = string
-  sensitive   = true
-}
-
-variable "db_instance_class" {
-  description = "RDS instance class"
-  type        = string
-  default     = "db.t3.micro"
-}
-
-variable "desired_capacity" {
-  description = "Desired number of EC2 instances in the Auto Scaling Group"
-  type        = number
-  default     = 1
-}
-
-variable "app_port" {
-  description = "Port for the application backend"
-  type        = number
-  default     = 8000
-}
-
-variable "health_port" {
-  description = "Port for the health check server"
-  type        = number
-  default     = 8081
-}
-
-variable "git_repository" {
-  description = "Git repository URL for the application"
-  type        = string
-  default     = "https://github.com/scottiegreff/rag-chatbot.git"
-}
-
-variable "python_version" {
-  description = "Python version to install"
-  type        = string
-  default     = "3.9"
 }
 
 # Data Sources
@@ -145,25 +42,55 @@ data "aws_ami" "amazon_linux" {
 resource "aws_vpc" "main" {
   cidr_block           = var.vpc_cidr
   enable_dns_hostnames = true
-  tags = { Name = "main-vpc" }
+  enable_dns_support   = true
+  
+  tags = { 
+    Name = "main-vpc"
+    Environment = var.environment
+  }
 }
 
-# Subnets
+# PUBLIC SUBNETS (Web Tier) - ALB, NAT Gateways, Bastion
 resource "aws_subnet" "public" {
-  count                   = length(var.availability_zones)
+  count                   = var.subnet_count
   vpc_id                  = aws_vpc.main.id
   cidr_block              = var.public_subnet_cidrs[count.index]
-  availability_zone       = var.availability_zones[count.index]
+  availability_zone       = data.aws_availability_zones.available.names[count.index]
   map_public_ip_on_launch = true
-  tags = { Name = "public-subnet-${var.availability_zones[count.index]}" }
+  
+  tags = { 
+    Name = "public-subnet-${data.aws_availability_zones.available.names[count.index]}"
+    Tier = "web"
+    Type = "public"
+  }
 }
 
-resource "aws_subnet" "private" {
-  count             = length(var.availability_zones)
+# PRIVATE APP SUBNETS (Application Tier) - EC2 instances
+resource "aws_subnet" "private_app" {
+  count             = var.subnet_count
   vpc_id            = aws_vpc.main.id
-  cidr_block        = var.private_subnet_cidrs[count.index]
-  availability_zone = var.availability_zones[count.index]
-  tags = { Name = "private-subnet-${var.availability_zones[count.index]}" }
+  cidr_block        = var.private_app_subnet_cidrs[count.index]
+  availability_zone = data.aws_availability_zones.available.names[count.index]
+  
+  tags = { 
+    Name = "private-app-subnet-${data.aws_availability_zones.available.names[count.index]}"
+    Tier = "application"
+    Type = "private"
+  }
+}
+
+# PRIVATE DB SUBNETS (Database Tier) - RDS, EFS
+resource "aws_subnet" "private_db" {
+  count             = var.subnet_count
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = var.private_db_subnet_cidrs[count.index]
+  availability_zone = data.aws_availability_zones.available.names[count.index]
+  
+  tags = { 
+    Name = "private-db-subnet-${data.aws_availability_zones.available.names[count.index]}"
+    Tier = "database"
+    Type = "private"
+  }
 }
 
 # Internet Gateway
@@ -172,72 +99,224 @@ resource "aws_internet_gateway" "igw" {
   tags   = { Name = "main-igw" }
 }
 
-# EIP for NAT
+# EIP & NAT Gateways (one per AZ for HA)
 resource "aws_eip" "nat" {
-  domain = "vpc"
+  count      = var.subnet_count
+  domain     = "vpc"
+  depends_on = [aws_internet_gateway.igw]
+  
+  tags = { 
+    Name = "nat-eip-${data.aws_availability_zones.available.names[count.index]}"
+  }
+}
+
+resource "aws_nat_gateway" "nat" {
+  count         = var.subnet_count
+  allocation_id = aws_eip.nat[count.index].id
+  subnet_id     = aws_subnet.public[count.index].id
+  
+  tags = { 
+    Name = "nat-gateway-${data.aws_availability_zones.available.names[count.index]}"
+  }
+  
   depends_on = [aws_internet_gateway.igw]
 }
 
-# NAT Gateway
-resource "aws_nat_gateway" "nat" {
-  allocation_id = aws_eip.nat.id
-  subnet_id     = aws_subnet.public[0].id
-  tags          = { Name = "main-nat-gateway" }
-}
+# ROUTE TABLES
 
-# Route Tables
+# Public Route Table (Web Tier)
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id
-
+  
   route {
     cidr_block = "0.0.0.0/0"
     gateway_id = aws_internet_gateway.igw.id
   }
-
-  tags = { Name = "public-rt" }
+  
+  tags = { 
+    Name = "public-rt"
+    Tier = "web"
+  }
 }
 
 resource "aws_route_table_association" "public" {
-  count          = length(var.availability_zones)
+  count          = var.subnet_count
   subnet_id      = aws_subnet.public[count.index].id
   route_table_id = aws_route_table.public.id
 }
 
-resource "aws_route_table" "private" {
+# Private App Route Tables (Application Tier)
+resource "aws_route_table" "private_app" {
+  count  = var.subnet_count
   vpc_id = aws_vpc.main.id
-
+  
   route {
     cidr_block     = "0.0.0.0/0"
-    nat_gateway_id = aws_nat_gateway.nat.id
+    nat_gateway_id = aws_nat_gateway.nat[count.index].id
   }
-
-  tags = { Name = "private-rt" }
+  
+  tags = { 
+    Name = "private-app-rt-${data.aws_availability_zones.available.names[count.index]}"
+    Tier = "application"
+  }
 }
 
-resource "aws_route_table_association" "private" {
-  count          = length(var.availability_zones)
-  subnet_id      = aws_subnet.private[count.index].id
-  route_table_id = aws_route_table.private.id
+resource "aws_route_table_association" "private_app" {
+  count          = var.subnet_count
+  subnet_id      = aws_subnet.private_app[count.index].id
+  route_table_id = aws_route_table.private_app[count.index].id
 }
 
-# Security Groups
-# ALB security group removed - no longer needed
+# Private DB Route Tables (Database Tier) - No internet access
+resource "aws_route_table" "private_db" {
+  count  = var.subnet_count
+  vpc_id = aws_vpc.main.id
+  
+  tags = { 
+    Name = "private-db-rt-${data.aws_availability_zones.available.names[count.index]}"
+    Tier = "database"
+  }
+}
 
-resource "aws_security_group" "app" {
-  name        = "app-sg"
-  description = "Allow HTTP and SSH"
+resource "aws_route_table_association" "private_db" {
+  count          = var.subnet_count
+  subnet_id      = aws_subnet.private_db[count.index].id
+  route_table_id = aws_route_table.private_db[count.index].id
+}
+
+# SECURITY GROUPS
+
+# Application Load Balancer Security Group
+resource "aws_security_group" "alb" {
+  count       = var.create_load_balancer ? 1 : 0
+  name        = "alb-sg"
+  description = "Security group for ALB (Web Tier)"
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    description = "HTTP from anywhere"
-    from_port   = 8000
-    to_port     = 8000
+    description = "HTTP from internet"
+    from_port   = 80
+    to_port     = 80
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
   ingress {
-    description = "SSH"
+    description = "HTTPS from internet"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    description = "All outbound to app tier"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = { 
+    Name = "alb-sg"
+    Tier = "web"
+  }
+}
+
+# Application Tier Security Group
+resource "aws_security_group" "app" {
+  name        = "app-sg"
+  description = "Security group for application servers (App Tier)"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    description     = "Application port from ALB"
+    from_port       = var.app_port
+    to_port         = var.app_port
+    protocol        = "tcp"
+    security_groups = var.create_load_balancer ? [aws_security_group.alb[0].id] : []
+    cidr_blocks     = var.create_load_balancer ? [] : [var.vpc_cidr]
+  }
+  
+  ingress {
+    description     = "SSH from bastion"
+    from_port       = 22
+    to_port         = 22
+    protocol        = "tcp"
+    security_groups = var.create_bastion ? [aws_security_group.bastion[0].id] : []
+    cidr_blocks     = var.create_bastion ? [] : [var.allowed_ssh_cidr]
+  }
+  
+  egress {
+    description = "All outbound"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  
+  tags = { 
+    Name = "app-sg"
+    Tier = "application"
+  }
+}
+
+# Database Tier Security Group
+resource "aws_security_group" "rds" {
+  name        = "rds-sg"
+  description = "Security group for RDS database (Database Tier)"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    description     = "PostgreSQL from app tier only"
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = [aws_security_group.app.id]
+  }
+  
+  tags = { 
+    Name = "rds-sg"
+    Tier = "database"
+  }
+}
+
+# EFS Security Group (Database Tier)
+resource "aws_security_group" "efs" {
+  name        = "efs-sg"
+  description = "Security group for EFS (Database Tier)"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    description     = "NFS from app tier only"
+    from_port       = 2049
+    to_port         = 2049
+    protocol        = "tcp"
+    security_groups = [aws_security_group.app.id]
+  }
+  
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  
+  tags = { 
+    Name = "efs-sg"
+    Tier = "database"
+  }
+}
+
+# Bastion Host Security Group
+resource "aws_security_group" "bastion" {
+  count       = var.create_bastion ? 1 : 0
+  name        = "bastion-sg"
+  description = "Security group for bastion host (Web Tier)"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    description = "SSH from allowed CIDR"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
@@ -245,373 +324,233 @@ resource "aws_security_group" "app" {
   }
 
   egress {
-    description = "All outbound"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = { Name = "app-sg" }
-}
-
-resource "aws_security_group" "rds" {
-  name        = "rds-sg"
-  description = "Allow Postgres from app servers"
-  vpc_id      = aws_vpc.main.id
-
-  ingress {
-    description      = "Postgres"
-    from_port        = 5432
-    to_port          = 5432
-    protocol         = "tcp"
-    security_groups  = [aws_security_group.app.id]
+    description = "SSH to app tier"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = var.private_app_subnet_cidrs
   }
 
   egress {
-    description = "All outbound"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
+    description = "HTTPS for updates"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = { Name = "rds-sg" }
-}
-
-resource "aws_security_group" "efs" {
-  name        = "efs-sg"
-  description = "Allow NFS from app servers"
-  vpc_id      = aws_vpc.main.id
-
-  ingress {
-    description      = "NFS"
-    from_port        = 2049
-    to_port          = 2049
-    protocol         = "tcp"
-    security_groups  = [aws_security_group.app.id]
   }
 
   egress {
-    description = "All outbound"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
+    description = "HTTP for updates"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  tags = { Name = "efs-sg" }
+  tags = { 
+    Name = "bastion-sg"
+    Tier = "web"
+  }
 }
 
-# Load balancer removed - using EC2 directly
-
-# EFS Configuration
+# EFS (Database Tier)
 resource "aws_efs_file_system" "efs" {
   creation_token = "main-efs"
-  tags           = { Name = "main-efs" }
+  encrypted      = true
+  
+  performance_mode = "generalPurpose"
+  throughput_mode  = "provisioned"
+  provisioned_throughput_in_mibps = 100
+  
+  tags = { 
+    Name = "main-efs"
+    Environment = var.environment
+    Tier = "database"
+  }
 }
 
 resource "aws_efs_mount_target" "efs_mt" {
-  count          = length(var.availability_zones)
-  file_system_id = aws_efs_file_system.efs.id
-  subnet_id      = aws_subnet.private[count.index].id
+  count           = var.subnet_count
+  file_system_id  = aws_efs_file_system.efs.id
+  subnet_id       = aws_subnet.private_db[count.index].id  # Database tier
   security_groups = [aws_security_group.efs.id]
 }
 
-# Launch Template for App Servers
+# RDS Subnet Group (Database Tier)
+resource "aws_db_subnet_group" "rds" {
+  name       = "rds-subnet-group"
+  subnet_ids = aws_subnet.private_db[*].id  # Database tier subnets
+  
+  tags = { 
+    Name = "RDS subnet group"
+    Tier = "database"
+  }
+}
+
+# RDS Database (Database Tier)
+resource "aws_db_instance" "postgres" {
+  count                     = var.create_rds ? 1 : 0
+  identifier                = "main-postgres-db"
+  engine                    = "postgres"
+  engine_version            = "15.4"
+  instance_class            = var.db_instance_class
+  allocated_storage         = var.db_allocated_storage
+  storage_type              = "gp3"
+  storage_encrypted         = true
+  
+  db_name  = var.db_name
+  username = var.db_username
+  password = var.db_password
+  
+  db_subnet_group_name   = aws_db_subnet_group.rds.name
+  vpc_security_group_ids = [aws_security_group.rds.id]
+  
+  backup_retention_period = 7
+  backup_window          = "03:00-04:00"
+  maintenance_window     = "sun:04:00-sun:05:00"
+  
+  skip_final_snapshot = true
+  deletion_protection = false
+  
+  tags = {
+    Name = "main-postgres-db"
+    Environment = var.environment
+    Tier = "database"
+  }
+}
+
+# Launch Template (Application Tier)
 resource "aws_launch_template" "app_lt" {
   name_prefix   = "app-lt-"
   image_id      = data.aws_ami.amazon_linux.id
   instance_type = var.instance_type_app
   key_name      = var.key_name
 
-  iam_instance_profile {
-    name = aws_iam_instance_profile.ssm_profile.name
-  }
+  vpc_security_group_ids = [aws_security_group.app.id]
 
-  network_interfaces {
-    associate_public_ip_address = true
-    subnet_id                   = aws_subnet.public[0].id
-    security_groups             = [aws_security_group.app.id]
-  }
-
-  block_device_mappings {
-    device_name = "/dev/xvda"
-    ebs {
-      volume_size = 32
-      volume_type = "gp3"
-      delete_on_termination = true
-    }
-  }
-
-  user_data = base64encode(
-    <<-EOF
-#!/bin/bash
-set -e
-
-# Enable logging
-exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
-
-echo "=== Starting user_data script ==="
-date
-
-# Update system
-echo "Updating system packages..."
-yum update -y
-
-# Install Python 3.9 (Amazon Linux 2 doesn't have 3.9, so we'll use 3.8 and enable EPEL)
-echo "Installing Python 3..."
-yum install -y python3 python3-pip python3-devel
-alternatives --install /usr/bin/python3 python3 /usr/bin/python3 1
-alternatives --install /usr/bin/pip3 pip3 /usr/bin/pip3 1
-
-echo "Python version: $(python3 --version)"
-echo "Pip version: $(pip3 --version)"
-
-# Install Docker
-echo "Installing Docker..."
-yum install -y docker
-systemctl start docker
-systemctl enable docker
-usermod -a -G docker ec2-user
-
-echo "Docker version: $(docker --version)"
-
-# Install Docker Compose (latest version)
-echo "Installing Docker Compose..."
-DOCKER_COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep 'tag_name' | cut -d" -f4)
-echo "Docker Compose version: $DOCKER_COMPOSE_VERSION"
-curl -L "https://github.com/docker/compose/releases/download/$${DOCKER_COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-chmod +x /usr/local/bin/docker-compose
-
-echo "Docker Compose version: $(docker-compose --version)"
-
-# Install additional tools
-echo "Installing additional tools..."
-yum install -y git wget curl jq
-
-# Create application directory
-echo "Creating application directory..."
-mkdir -p /opt/fci-chatbot
-cd /opt/fci-chatbot
-
-# Clone the application (using the correct repository)
-echo "Cloning application repository..."
-git clone https://github.com/scottiegreff/FCI-Chatbot-clean.git .
-
-# Create a startup script that handles the transition properly
-cat > /opt/fci-chatbot/startup.sh << 'STARTUP_EOF'
-#!/bin/bash
-set -e
-
-echo "Starting FCI Chatbot deployment..."
-
-# Function to check if port is in use
-check_port() {
-    local port=$1
-    if lsof -i :$port > /dev/null 2>&1; then
-        echo "Port $port is in use, stopping process..."
-        lsof -ti :$port | xargs kill -9
-        sleep 2
-    fi
-}
-
-# Function to wait for service to be ready
-wait_for_service() {
-    local url=$1
-    local max_attempts=30
-    local attempt=1
-    
-    echo "Waiting for service at $url..."
-    while [ $attempt -le $max_attempts ]; do
-        if curl -f -s $url > /dev/null 2>&1; then
-            echo "Service is ready!"
-            return 0
-        fi
-        echo "Attempt $attempt/$max_attempts - Service not ready yet..."
-        sleep 10
-        attempt=$((attempt + 1))
-    done
-    echo "Service failed to start within expected time"
-    return 1
-}
-
-# Create production environment file
-cat > .env << 'ENV_EOF'
-# Production Environment Configuration
-POSTGRES_PASSWORD=FCI_Chatbot_2024_Secure_Pass!
-DB_HOST=main-postgres.cb4my0e6eoxp.ca-central-1.rds.amazonaws.com
-DB_PORT=5432
-DB_NAME=appdb
-DB_USER=adminuser
-WEAVIATE_URL=http://localhost:8080
-MODEL_PATH=/models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf
-MODEL_TYPE=llama
-GPU_LAYERS=0
-CONTEXT_LENGTH=4096
-ENABLE_RAG=true
-RAG_USE_CPU=true
-CHUNK_SIZE=500
-OVERLAP=50
-HOST=0.0.0.0
-PORT=8000
-DEBUG=false
-CORS_ORIGINS=*
-MAX_HISTORY_MESSAGES=50
-ENABLE_INTERNET_SEARCH=false
-CT_METAL=0
-CT_CUDA=0
-ENV_EOF
-
-# Download the TinyLlama model if not present
-mkdir -p models
-if [ ! -f "models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf" ]; then
-    echo "Downloading TinyLlama model..."
-    wget -O models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf "https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
-fi
-
-# Stop any existing processes on port 8000
-check_port 8000
-
-# Start Docker Compose
-echo "Starting Docker Compose..."
-/usr/local/bin/docker-compose down || true
-/usr/local/bin/docker-compose up -d
-
-# Wait for backend to be ready
-wait_for_service "http://localhost:8000/api/database/health"
-
-echo "FCI Chatbot deployment complete!"
-echo "Application is available at: http://localhost:8000"
-echo "Health check: http://localhost:8000/api/database/health"
-STARTUP_EOF
-
-chmod +x /opt/fci-chatbot/startup.sh
-
-# Create a simple health check endpoint (different port to avoid conflicts)
-cat > /opt/fci-chatbot/health_server.py << 'HEALTH_EOF'
-from flask import Flask
-app = Flask(__name__)
-
-@app.route('/')
-def health():
-    return {"status": "deploying", "message": "FCI Chatbot is being deployed..."}
-
-@app.route('/ready')
-def ready():
-    return {"status": "ready", "message": "FCI Chatbot is ready!"}
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8081)
-HEALTH_EOF
-
-# Install Flask for health server
-pip3 install flask
-
-# Start health server on port 8081 (different from main app)
-nohup python3 /opt/fci-chatbot/health_server.py > /var/log/health_server.log 2>&1 &
-
-# Start the main application deployment
-nohup /opt/fci-chatbot/startup.sh > /var/log/app_deployment.log 2>&1 &
-
-echo "FCI Chatbot deployment initiated!"
-echo "Health server available at: http://localhost:8081"
-echo "Main application will be available at: http://localhost:8000"
-echo "Check logs: tail -f /var/log/app_deployment.log"
-EOF
-  )
+  # user_data = base64encode(templatefile("${path.module}/user_data.sh", {
+  #   efs_id    = aws_efs_file_system.efs.id
+  #   app_port  = var.app_port
+  #   db_endpoint = var.create_rds ? aws_db_instance.postgres[0].endpoint : ""
+  #   db_name     = var.db_name
+  #   db_username = var.db_username
+  #   db_password = var.db_password
+  # }))
 
   tag_specifications {
     resource_type = "instance"
-    tags = { Name = "app-server" }
+    tags = { 
+      Name = "app-server"
+      Environment = var.environment
+      Tier = "application"
+    }
+  }
+  
+  metadata_options {
+    http_endpoint = "enabled"
+    http_tokens   = "required"  # Require IMDSv2
   }
 }
 
-# Auto Scaling Group
+# Auto Scaling Group (Application Tier)
 resource "aws_autoscaling_group" "app_asg" {
-  name                      = "app-asg"
-  desired_capacity          = var.desired_capacity
-  max_size                  = 3
-  min_size                  = 1
+  name                = "app-asg"
+  vpc_zone_identifier = aws_subnet.private_app[*].id  # Application tier subnets
+  target_group_arns   = var.create_load_balancer ? [aws_lb_target_group.app[0].arn] : []
+  health_check_type   = var.create_load_balancer ? "ELB" : "EC2"
+  health_check_grace_period = 300
+  min_size            = var.asg_min_size
+  max_size            = var.asg_max_size
+  desired_capacity    = var.asg_desired_capacity
 
   launch_template {
     id      = aws_launch_template.app_lt.id
     version = "$Latest"
   }
 
-  vpc_zone_identifier       = aws_subnet.public[*].id
-  health_check_type         = "EC2"
-  health_check_grace_period = 600
-
   tag {
     key                 = "Name"
-    value               = "app-server"
+    value               = "app-asg"
+    propagate_at_launch = false
+  }
+
+  tag {
+    key                 = "Tier"
+    value               = "application"
     propagate_at_launch = true
   }
 }
 
-# RDS Configuration
-resource "aws_db_subnet_group" "rds_subnets" {
-  name       = "rds-subnet-group"
-  subnet_ids = aws_subnet.private[*].id
-}
+# Application Load Balancer (Web Tier)
+resource "aws_lb" "app" {
+  count              = var.create_load_balancer ? 1 : 0
+  name               = "app-lb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.alb[0].id]
+  subnets            = aws_subnet.public[*].id  # Web tier subnets
 
-resource "aws_db_instance" "postgres" {
-  identifier              = "main-postgres"
-  engine                  = "postgres"
-  instance_class          = var.db_instance_class
-  allocated_storage       = 20
-  db_name                 = "appdb"
-  username                = "adminuser"
-  password                = var.db_password
-  publicly_accessible     = false
-  multi_az                = true
-  vpc_security_group_ids  = [aws_security_group.rds.id]
-  db_subnet_group_name    = aws_db_subnet_group.rds_subnets.name
-  skip_final_snapshot     = true
+  enable_deletion_protection = false
 
-  tags = { Name = "main-rds" }
-}
-
-# IAM Role for Systems Manager
-resource "aws_iam_role" "ssm_role" {
-  name = "ssm-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole"
-        Effect = "Allow"
-        Principal = {
-          Service = "ec2.amazonaws.com"
-        }
-      }
-    ]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "ssm_policy" {
-  role       = aws_iam_role.ssm_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
-}
-
-resource "aws_iam_instance_profile" "ssm_profile" {
-  name = "ssm-profile"
-  role = aws_iam_role.ssm_role.name
-}
-
-# Outputs
-output "instance_info" {
-  description = "Information about the EC2 instances"
-  value = {
-    instance_type = var.instance_type_app
-    port          = 8000
-    note          = "Connect directly to EC2 instances via SSH or SSM"
+  tags = { 
+    Name = "app-lb"
+    Environment = var.environment
+    Tier = "web"
   }
 }
 
-output "rds_endpoint" {
-  description = "Postgres endpoint"
-  value       = aws_db_instance.postgres.address
+resource "aws_lb_target_group" "app" {
+  count    = var.create_load_balancer ? 1 : 0
+  name     = "app-tg"
+  port     = var.app_port
+  protocol = "HTTP"
+  vpc_id   = aws_vpc.main.id
+
+  health_check {
+    enabled             = true
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+    timeout             = 5
+    interval            = 30
+    path                = var.health_check_path
+    matcher             = "200"
+    port                = "traffic-port"
+    protocol            = "HTTP"
+  }
+
+  tags = {
+    Name = "app-target-group"
+    Environment = var.environment
+    Tier = "web"
+  }
+}
+
+resource "aws_lb_listener" "app" {
+  count             = var.create_load_balancer ? 1 : 0
+  load_balancer_arn = aws_lb.app[0].arn
+  port              = "80"
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.app[0].arn
+  }
+}
+
+# Bastion Host (Web Tier)
+resource "aws_instance" "bastion" {
+  count                  = var.create_bastion ? 1 : 0
+  ami                    = data.aws_ami.amazon_linux.id
+  instance_type          = var.bastion_instance_type
+  key_name               = var.key_name
+  subnet_id              = aws_subnet.public[0].id  # Web tier subnet
+  vpc_security_group_ids = [aws_security_group.bastion[0].id]
+  
+  associate_public_ip_address = true
+  
+  tags = {
+    Name = "bastion-host"
+    Environment = var.environment
+    Tier = "web"
+  }
 }

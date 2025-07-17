@@ -18,12 +18,12 @@ from backend.database import init_db
 
 # Get server configuration from environment variables
 HOST = os.getenv("HOST", "0.0.0.0")
-PORT = int(os.getenv("PORT", "8000"))
+PORT = int(os.getenv("PORT", "8010"))
 DEBUG = os.getenv("DEBUG", "True").lower() == "true"
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",")
 
 # Initialize FastAPI app
-app = FastAPI(title="FCIAS Chatbot", description="FCIAS local chatbot with LLM integration")
+app = FastAPI(title="AI Chatbot", description="AI local chatbot with LLM integration")
 
 # CORS setup
 app.add_middleware(

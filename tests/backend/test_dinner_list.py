@@ -17,7 +17,7 @@ def test_dinner_list():
     
     try:
         response = requests.post(
-            "http://localhost:8000/api/chat",
+            "http://localhost:8010/api/chat",
             json={
                 "message": test_message
             },

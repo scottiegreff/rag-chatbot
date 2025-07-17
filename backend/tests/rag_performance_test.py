@@ -31,7 +31,7 @@ def test_without_rag():
         try:
             # Use a simple endpoint that bypasses RAG
             response = requests.post(
-                "http://localhost:8000/api/test-stream-post",
+                "http://localhost:8010/api/test-stream-post",
                 json={"message": message},
                 headers={"Content-Type": "application/json"},
                 stream=True
@@ -78,7 +78,7 @@ def test_with_rag():
         
         try:
             response = requests.post(
-                "http://localhost:8000/api/chat/stream",
+                "http://localhost:8010/api/chat/stream",
                 json={"message": message},
                 headers={"Content-Type": "application/json"},
                 stream=True
@@ -126,7 +126,7 @@ def test_rag_bypass():
         try:
             # Use the chat endpoint with RAG bypass
             response = requests.post(
-                "http://localhost:8000/api/chat/stream?bypass_rag=true",
+                "http://localhost:8010/api/chat/stream?bypass_rag=true",
                 json={"message": message},
                 headers={"Content-Type": "application/json"},
                 stream=True
@@ -155,7 +155,7 @@ def test_rag_bypass():
             print(f"   ❌ Error: {str(e)}")
 
 if __name__ == "__main__":
-    print("FCI-Chatbot RAG Performance Test")
+    print("AI-Chatbot RAG Performance Test")
     print("=" * 60)
     print("This script will help identify if RAG is causing LLM slowdown.")
     print("Make sure your server is running in the correct environment.")

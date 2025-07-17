@@ -37,18 +37,12 @@ def clear_vector_database():
 
 def main():
     """Main function to clear the vector database."""
-    print("🗑️  FCIAS Chatbot - Vector Database Clear Utility")
+    print("🗑️  AI Chatbot - Vector Database Clear Utility")
     print("=" * 50)
     
-    # Confirm with user
-    response = input("Are you sure you want to clear ALL documents from the vector database? (yes/no): ")
-    
-    if response.lower() in ['yes', 'y']:
-        clear_vector_database()
-        print("\n✅ Vector database cleared successfully!")
-    else:
-        print("❌ Operation cancelled by user")
-        sys.exit(0)
+    # Clear the database directly
+    clear_vector_database()
+    print("\n✅ Vector database cleared successfully!")
 
 if __name__ == "__main__":
     main() 

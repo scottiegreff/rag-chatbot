@@ -1,7 +1,7 @@
 # Docker Compose override for minimal backend image
 services:
   backend:
-    image: fci-chatbot-backend:minimal
+    image: ai-chatbot-backend:minimal
     build:
       context: .
       dockerfile: Dockerfile.backend.minimal

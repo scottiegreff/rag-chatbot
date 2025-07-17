@@ -9,7 +9,7 @@ import json
 import time
 
 # Configuration
-BASE_URL = "http://localhost:8000"
+BASE_URL = "http://localhost:8010"
 
 def test_search_status():
     """Test the search status endpoint."""

@@ -8,7 +8,7 @@ import os
 # Set environment variables to match Docker container
 os.environ['DB_HOST'] = 'postgres'
 os.environ['DB_PORT'] = '5432'
-os.environ['DB_NAME'] = 'fci_chatbot'
+os.environ['DB_NAME'] = 'ai_chatbot'
 os.environ['DB_USER'] = 'postgres'
 os.environ['DB_PASSWORD'] = 'password1234'
 

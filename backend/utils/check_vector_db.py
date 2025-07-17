@@ -50,7 +50,7 @@ def check_vector_database():
 
 def main():
     """Main function to check the vector database."""
-    print("🔍 FCIAS Chatbot - Vector Database Check Utility")
+    print("🔍 AI Chatbot - Vector Database Check Utility")
     print("=" * 50)
     
     check_vector_database()

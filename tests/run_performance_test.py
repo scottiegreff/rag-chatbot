@@ -16,24 +16,36 @@ from typing import Dict, List, Tuple
 
 class PerformanceTester:
     def __init__(self):
-        self.base_url = "http://localhost:8000"
+        # Get port from environment or default to 8010
+        port = os.getenv("PORT", "8010")
+        self.base_url = f"http://localhost:{port}"
         self.test_results = {}
         self.current_environment = None
+        # Always resolve the project root (parent of this script's directory)
+        self.project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+        self.summaries_dir = os.path.join(self.project_root, 'testing_summaries')
         
     def log(self, message: str):
         """Print timestamped log message"""
         timestamp = datetime.now().strftime("%H:%M:%S")
         print(f"[{timestamp}] {message}")
         
-    def run_command(self, command: str, timeout: int = 60) -> Tuple[bool, str]:
+    def run_command(self, command: str, timeout: int = 120) -> Tuple[bool, str]:
         """Run a shell command and return success status and output"""
         try:
+            # Set up environment variables for the subprocess
+            env = os.environ.copy()
+            env['PYTHONPATH'] = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            
+            # Run command without start_new_session to maintain environment
             result = subprocess.run(
                 command, 
                 shell=True, 
                 capture_output=True, 
                 text=True, 
-                timeout=timeout
+                timeout=timeout,
+                env=env,
+                cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # Run from project root
             )
             return result.returncode == 0, result.stdout + result.stderr
         except subprocess.TimeoutExpired:
@@ -44,10 +56,12 @@ class PerformanceTester:
     def switch_to_local(self) -> bool:
         """Switch to M1 GPU local environment"""
         self.log("🔄 Switching to M1 GPU (Local) environment...")
-        success, output = self.run_command("./switch-to-local.sh")
+        success, output = self.run_command("PORT=8000 ./switch-to-local.sh")
         if success:
             self.log("✅ Successfully switched to M1 GPU")
             self.current_environment = "M1 GPU (Local)"
+            # Use port 8000 for local environment
+            self.base_url = "http://localhost:8000"
             time.sleep(10)  # Wait for backend to start
             return True
         else:
@@ -57,10 +71,12 @@ class PerformanceTester:
     def switch_to_docker(self) -> bool:
         """Switch to Docker CPU environment"""
         self.log("🔄 Switching to Docker CPU environment...")
-        success, output = self.run_command("./switch-to-docker.sh")
+        success, output = self.run_command("PORT=8000 ./switch-to-docker.sh")
         if success:
             self.log("✅ Successfully switched to Docker CPU")
             self.current_environment = "Docker CPU"
+            # Use port 8000 for Docker environment
+            self.base_url = "http://localhost:8000"
             time.sleep(15)  # Wait for backend to start
             return True
         else:
@@ -84,9 +100,11 @@ class PerformanceTester:
         
     def send_chat_request(self, message: str, session_id: str) -> Dict:
         """Send a chat request and measure timing"""
+        self.log(f"📤 Sending request: {message[:50]}...")
         start_time = time.time()
         
         try:
+            self.log(f"🌐 Making POST request to {self.base_url}/api/chat/stream")
             response = requests.post(
                 f"{self.base_url}/api/chat/stream",
                 json={"message": message, "session_id": session_id},
@@ -95,14 +113,21 @@ class PerformanceTester:
             )
             
             if response.status_code != 200:
+                self.log(f"❌ HTTP Error: {response.status_code}")
                 return {"error": f"HTTP {response.status_code}", "success": False}
-                
+            
+            self.log("📥 Starting to read streaming response...")
             # Read the streaming response
             tokens = []
             first_token_time = None
+            line_count = 0
             
             for line in response.iter_lines():
                 if line:
+                    line_count += 1
+                    if line_count % 10 == 0:  # Log every 10th line
+                        self.log(f"📄 Processing line {line_count}...")
+                    
                     line_str = line.decode('utf-8')
                     if line_str.startswith('data: '):
                         data_str = line_str[6:]  # Remove 'data: ' prefix
@@ -113,10 +138,14 @@ class PerformanceTester:
                                     tokens.append(data['delta'])
                                     if first_token_time is None:
                                         first_token_time = time.time()
+                                        self.log(f"⚡ First token received after {time.time() - start_time:.2f}s")
                             except json.JSONDecodeError:
                                 continue
                                 
             end_time = time.time()
+            
+            self.log(f"✅ Request completed in {end_time - start_time:.2f}s")
+            self.log(f"📊 Generated {len(tokens)} tokens")
             
             # Calculate metrics
             total_time = (end_time - start_time) * 1000  # Convert to ms
@@ -136,6 +165,7 @@ class PerformanceTester:
             }
             
         except Exception as e:
+            self.log(f"❌ Exception occurred: {str(e)}")
             return {"error": str(e), "success": False}
             
     def run_test_suite(self, environment: str) -> Dict:
@@ -150,36 +180,49 @@ class PerformanceTester:
         
         # Test 1: Simple generic query
         self.log("📝 Test 1: Simple generic query")
+        self.log("=" * 50)
         result = self.send_chat_request(
             "What is the capital of France?", 
             f"test-{environment.lower().replace(' ', '-')}-simple"
         )
         test_results["tests"]["simple_query"] = result
+        self.log(f"📋 Test 1 result: {'✅ Success' if result.get('success') else '❌ Failed'}")
+        self.log("=" * 50)
         
         # Test 2: Complex RAG query
         self.log("📚 Test 2: RAG query with context")
+        self.log("=" * 50)
         result = self.send_chat_request(
             "Tell me about Cody and Scott's adventures at FCIAS", 
             f"test-{environment.lower().replace(' ', '-')}-rag"
         )
         test_results["tests"]["rag_query"] = result
+        self.log(f"📋 Test 2 result: {'✅ Success' if result.get('success') else '❌ Failed'}")
+        self.log("=" * 50)
         
         # Test 3: SQL database query
         self.log("🗄️ Test 3: SQL database query")
+        self.log("=" * 50)
         result = self.send_chat_request(
             "How many products do we have in our database?", 
             f"test-{environment.lower().replace(' ', '-')}-sql"
         )
         test_results["tests"]["sql_query"] = result
+        self.log(f"📋 Test 3 result: {'✅ Success' if result.get('success') else '❌ Failed'}")
+        self.log("=" * 50)
         
         # Test 4: Long generation test
         self.log("📖 Test 4: Long generation test")
+        self.log("=" * 50)
         result = self.send_chat_request(
             "Write a detailed explanation of machine learning with examples", 
             f"test-{environment.lower().replace(' ', '-')}-long"
         )
         test_results["tests"]["long_generation"] = result
+        self.log(f"📋 Test 4 result: {'✅ Success' if result.get('success') else '❌ Failed'}")
+        self.log("=" * 50)
         
+        self.log(f"🎉 All tests completed for {environment}")
         return test_results
         
     def generate_markdown_report(self, results: Dict) -> str:
@@ -300,13 +343,27 @@ class PerformanceTester:
                         "first_token_latency": test_result.get("first_token_latency", 0)
                     })
         
-        if len(improvements) >= 2:
-            m1_avg_speed = sum([i["tokens_per_second"] for i in improvements if i["environment"] == "M1 GPU (Local)"]) / len([i for i in improvements if i["environment"] == "M1 GPU (Local)"])
-            docker_avg_speed = sum([i["tokens_per_second"] for i in improvements if i["environment"] == "Docker CPU"]) / len([i for i in improvements if i["environment"] == "Docker CPU"])
+        # Check if we have results from both environments
+        m1_results = [i for i in improvements if i["environment"] == "M1 GPU (Local)"]
+        docker_results = [i for i in improvements if i["environment"] == "Docker CPU"]
+        
+        if len(m1_results) > 0 and len(docker_results) > 0:
+            m1_avg_speed = sum([i["tokens_per_second"] for i in m1_results]) / len(m1_results)
+            docker_avg_speed = sum([i["tokens_per_second"] for i in docker_results]) / len(docker_results)
             
             if docker_avg_speed > 0:
                 speed_ratio = m1_avg_speed / docker_avg_speed
                 report += f"- **Average Token Generation:** M1 GPU is **{speed_ratio:.1f}x faster** ({m1_avg_speed:.2f} vs {docker_avg_speed:.2f} tokens/sec)\n"
+        elif len(docker_results) > 0:
+            docker_avg_speed = sum([i["tokens_per_second"] for i in docker_results]) / len(docker_results)
+            report += f"- **Docker CPU Performance:** Average {docker_avg_speed:.2f} tokens/sec\n"
+            report += f"- **M1 GPU Results:** Not available (environment switch failed)\n"
+        elif len(m1_results) > 0:
+            m1_avg_speed = sum([i["tokens_per_second"] for i in m1_results]) / len(m1_results)
+            report += f"- **M1 GPU Performance:** Average {m1_avg_speed:.2f} tokens/sec\n"
+            report += f"- **Docker CPU Results:** Not available\n"
+        else:
+            report += f"- **No successful test results available**\n"
         
         report += "\n## Recommendations\n\n"
         report += "- **For Production:** Use M1 GPU with Metal acceleration for optimal performance\n"
@@ -319,22 +376,30 @@ class PerformanceTester:
         """Run the complete comprehensive test"""
         self.log("🚀 Starting comprehensive performance test...")
         
-        # Create testing_summaries directory if it doesn't exist
-        os.makedirs("testing_summaries", exist_ok=True)
+        # Set environment variables for faster testing
+        os.environ['MAX_NEW_TOKENS'] = '50'  # Limit tokens for faster testing
+        self.log("⚙️ Set MAX_NEW_TOKENS=50 for faster testing")
+        
+        # Always create summaries in the project root
+        os.makedirs(self.summaries_dir, exist_ok=True)
         
         # Test M1 GPU
+        self.log("🔄 Phase 1: Testing M1 GPU environment...")
         if self.switch_to_local() and self.wait_for_backend():
-            self.log("🧪 Testing M1 GPU environment...")
+            self.log("✅ M1 GPU environment ready, starting tests...")
             m1_results = self.run_test_suite("M1 GPU (Local)")
             self.test_results["M1 GPU (Local)"] = m1_results
+            self.log("✅ M1 GPU tests completed")
         else:
             self.log("❌ Failed to test M1 GPU environment")
             
         # Test Docker CPU
+        self.log("🔄 Phase 2: Testing Docker CPU environment...")
         if self.switch_to_docker() and self.wait_for_backend():
-            self.log("🧪 Testing Docker CPU environment...")
+            self.log("✅ Docker CPU environment ready, starting tests...")
             docker_results = self.run_test_suite("Docker CPU")
             self.test_results["Docker CPU"] = docker_results
+            self.log("✅ Docker CPU tests completed")
         else:
             self.log("❌ Failed to test Docker CPU environment")
             
@@ -342,9 +407,9 @@ class PerformanceTester:
         self.log("📝 Generating comprehensive report...")
         report = self.generate_markdown_report(self.test_results)
         
-        # Save report
+        # Save report in the project root summaries dir
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        filename = f"testing_summaries/performance_test_{timestamp}.md"
+        filename = os.path.join(self.summaries_dir, f"performance_test_{timestamp}.md")
         
         with open(filename, 'w') as f:
             f.write(report)

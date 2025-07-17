@@ -19,7 +19,7 @@ def test_list_generation():
     try:
         # Send request to the chat endpoint
         response = requests.post(
-            "http://localhost:8000/api/chat",
+            "http://localhost:8010/api/chat",
             json={
                 "message": test_message
             },
@@ -71,7 +71,7 @@ def test_simple_list():
     
     try:
         response = requests.post(
-            "http://localhost:8000/api/chat",
+            "http://localhost:8010/api/chat",
             json={
                 "message": test_message
             },

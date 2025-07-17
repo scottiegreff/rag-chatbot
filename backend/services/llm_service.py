@@ -200,7 +200,7 @@ class LLMService:
                     temperature=self.temperature,
                     top_p=self.top_p,
                     repeat_penalty=self.repetition_penalty,
-                    stop=["[INST]", "</s>", "<|endoftext|>", "User:", "Assistant:", "\n\nUser:", "\n\nAssistant:", "Implementing this functionality", "This functionality", "This will help", "This improves", "User: Do you", "User: Can you", "User: What", "User: How", "User: When", "User: Where", "User: Why", "User: Which"],
+                    stop=["[INST]", "</s>", "<|endoftext|>", "User:", "Assistant:", "\n\nUser:", "\n\nAssistant:"],
                     stream=True
                 )
                 model_call_end_time = time.time()
@@ -292,7 +292,7 @@ class LLMService:
                     temperature=self.temperature,
                     top_p=self.top_p,
                     repeat_penalty=self.repetition_penalty,
-                    stop=["[INST]", "</s>", "<|endoftext|>", "User:", "Assistant:", "\n\nUser:", "\n\nAssistant:", "Implementing this functionality", "This functionality", "This will help", "This improves", "User: Do you", "User: Can you", "User: What", "User: How", "User: When", "User: Where", "User: Why", "User: Which"]
+                    stop=["[INST]", "</s>", "<|endoftext|>", "User:", "Assistant:", "\n\nUser:", "\n\nAssistant:"]
                 )
                 model_call_end_time = datetime.utcnow()
                 model_call_duration = (model_call_end_time - model_call_start_time).total_seconds() * 1000

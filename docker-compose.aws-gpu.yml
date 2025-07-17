@@ -19,7 +19,7 @@ services:
       # GPU acceleration
       CT_CUDA: "1"
       GPU_LAYERS: "35"
-    command: ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+    command: ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8010", "--workers", "1"]
     volumes:
       # Remove source code mount in production
       - ./models:/app/models:ro
@@ -58,7 +58,7 @@ services:
   postgres:
     # Enhanced resource limits for production database
     environment:
-      POSTGRES_DB: fci_chatbot
+      POSTGRES_DB: ai_chatbot
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password1234
       # Performance tuning
@@ -110,5 +110,5 @@ volumes:
     driver: local
 
 networks:
-  fci-network:
+  ai-network:
     driver: bridge 

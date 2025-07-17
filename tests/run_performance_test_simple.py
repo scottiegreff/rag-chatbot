@@ -15,8 +15,11 @@ from typing import Dict, List, Tuple
 
 class SimplePerformanceTester:
     def __init__(self):
-        self.base_url = "http://localhost:8000"
+        self.base_url = "http://localhost:8010"
         self.test_results = {}
+        # Always resolve the project root (parent of this script's directory)
+        self.project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+        self.summaries_dir = os.path.join(self.project_root, 'testing_summaries')
         
     def log(self, message: str):
         """Print timestamped log message"""
@@ -296,10 +299,8 @@ class SimplePerformanceTester:
     def run_comprehensive_test(self):
         """Run the complete comprehensive test"""
         self.log("🚀 Starting comprehensive performance test...")
-        
-        # Create testing_summaries directory if it doesn't exist
-        os.makedirs("../testing_summaries", exist_ok=True)
-        
+        # Always create summaries in the project root
+        os.makedirs(self.summaries_dir, exist_ok=True)
         # Test current environment first (Docker CPU)
         if self.wait_for_backend():
             self.log("🧪 Testing Docker CPU environment...")
@@ -307,7 +308,6 @@ class SimplePerformanceTester:
             self.test_results["Docker CPU"] = docker_results
         else:
             self.log("❌ Failed to test Docker CPU environment")
-            
         # Switch to M1 GPU and test
         self.log("🔄 Switching to M1 GPU environment...")
         success, output = self.run_command("../switch-to-local.sh")
@@ -317,21 +317,17 @@ class SimplePerformanceTester:
             self.test_results["M1 GPU (Local)"] = m1_results
         else:
             self.log("❌ Failed to test M1 GPU environment")
-            
         # Generate report
         self.log("📝 Generating comprehensive report...")
         report = self.generate_markdown_report(self.test_results)
-        
-        # Save report
+        # Save report in the project root summaries dir
+        from datetime import datetime
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        filename = f"../testing_summaries/performance_test_{timestamp}.md"
-        
+        filename = os.path.join(self.summaries_dir, f"performance_test_{timestamp}.md")
         with open(filename, 'w') as f:
             f.write(report)
-            
         self.log(f"✅ Report saved to: {filename}")
         self.log("🎉 Comprehensive performance test completed!")
-        
         return filename
 
 def main():

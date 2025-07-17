@@ -6,7 +6,7 @@ echo "🔨 Building minimal backend image..."
 # Build the minimal image
 docker build \
     -f Dockerfile.backend.minimal \
-    -t fci-chatbot-backend:minimal \
+    -t ai-chatbot-backend:minimal \
     --target runtime \
     .
 
@@ -14,7 +14,7 @@ docker build \
 echo ""
 echo "📊 Image size comparison:"
 echo "Current backend image:"
-docker images | grep fci-chatbot-backend
+docker images | grep ai-chatbot-backend
 
 echo ""
 echo "✅ Minimal backend image built successfully!"

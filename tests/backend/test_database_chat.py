@@ -7,7 +7,7 @@ Tests the ability to ask questions about the PostgreSQL database via chat
 import requests
 import json
 
-BASE_URL = "http://localhost:8000/api"
+BASE_URL = "http://localhost:8010/api"
 
 def test_database_chat_queries():
     """Test various database-related chat queries"""
@@ -89,7 +89,7 @@ def main():
         test_specific_database_queries()
         
     except requests.exceptions.ConnectionError:
-        print("Error: Could not connect to the server. Make sure it's running on http://localhost:8000")
+        print("Error: Could not connect to the server. Make sure it's running on http://localhost:8010")
     except Exception as e:
         print(f"Error during testing: {e}")
 

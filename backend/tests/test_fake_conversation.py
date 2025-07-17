@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 # Test configuration
-API_BASE_URL = "http://localhost:8000/api"
+API_BASE_URL = "http://localhost:8010/api"
 
 async def test_fake_conversation():
     """Test that the chatbot doesn't generate fake conversations."""
@@ -130,7 +130,7 @@ async def test_specific_fake_conversation():
 async def main():
     """Run all tests."""
     print("🚀 Starting fake conversation detection tests...")
-    print("Make sure the chatbot API is running on http://localhost:8000")
+    print("Make sure the chatbot API is running on http://localhost:8010")
     print()
     
     # Test general fake conversation detection

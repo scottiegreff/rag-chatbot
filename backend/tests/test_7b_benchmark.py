@@ -9,7 +9,7 @@ import json
 import time
 from datetime import datetime
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = "http://localhost:8010"
 TIMEOUT = 60  # Increased timeout for 7B model
 
 def test_math_questions():

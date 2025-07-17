@@ -10,7 +10,7 @@ import json
 
 router = APIRouter()
 
-UPLOAD_DIR = Path("/tmp/fci_uploads")
+UPLOAD_DIR = Path("/tmp/ai_uploads")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 SUPPORTED_EXTENSIONS = {'.pdf', '.txt', '.docx', '.csv', '.xlsx', '.jpg', '.jpeg'}

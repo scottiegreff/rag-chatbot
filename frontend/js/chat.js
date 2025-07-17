@@ -1,6 +1,9 @@
 // Store the session ID
 let sessionId = null;
 
+// Test log to verify JavaScript is loading
+console.log('🚀 [TEST] Chat.js loaded successfully at:', new Date().toISOString());
+
 // Near the top with other variables, add an AbortController
 let currentStreamController = null;
 let isStreaming = false;
@@ -72,7 +75,7 @@ const AppState = {
     
     // Render methods
     renderUI() {
-        console.log("🎨 renderUI called with state:", this.ui);
+        // console.log("🎨 renderUI called with state:", this.ui);
         
         // Chat interface
         if (chatInterface) {
@@ -96,27 +99,18 @@ const AppState = {
         
         // Sidebar
         if (sidebar) {
-            console.log("🔧 Rendering sidebar...");
-            console.log("📱 Window width:", window.innerWidth);
-            console.log("🔧 sidebarOpen:", this.ui.sidebarOpen, "sidebarCollapsed:", this.ui.sidebarCollapsed);
-            
             if (window.innerWidth <= 768) {
                 // Mobile: use sidebarOpen state
-                console.log("📱 Mobile mode");
                 if (this.ui.sidebarOpen) {
-                    console.log("📱 Adding 'expanded' class");
                     sidebar.classList.add('expanded');
                     sidebar.classList.remove('collapsed');
                 } else {
-                    console.log("📱 Removing 'expanded' class");
                     sidebar.classList.remove('expanded');
                     sidebar.classList.remove('collapsed');
                 }
             } else {
                 // Desktop: use sidebarCollapsed state
-                console.log("🖥️ Desktop mode");
                 if (this.ui.sidebarCollapsed) {
-                    console.log("🖥️ Adding 'collapsed' class");
                     sidebar.classList.remove('expanded');
                     sidebar.classList.add('collapsed');
                     sidebar.style.width = '';
@@ -127,7 +121,6 @@ const AppState = {
                         sidebarToggle.style.display = 'block'; // Show toggle button when collapsed
                     }
                 } else {
-                    console.log("🖥️ Adding 'expanded' class");
                     sidebar.classList.add('expanded');
                     sidebar.classList.remove('collapsed');
                     if (sidebarToggle) {
@@ -136,8 +129,6 @@ const AppState = {
                     }
                 }
             }
-            
-            console.log("🔧 Final sidebar classes:", sidebar.className);
         }
         
         // Modal
@@ -355,22 +346,22 @@ function addMessage(content, role, isMarkdown = false) {
         contentDiv.className = 'message-content';
         
         // Debug the markdown rendering
-        console.log("Rendering markdown:", content.substring(0, 50) + "...");
+        // console.log("Rendering markdown:", content.substring(0, 50) + "...");
         const renderedHTML = md.render(content);
-        console.log("Rendered HTML:", renderedHTML.substring(0, 50) + "...");
+        // console.log("Rendered HTML:", renderedHTML.substring(0, 50) + "...");
         
         // Debug: Check if lists are being rendered
-        if (content.includes('-') || content.includes('*') || /\d+\./.test(content)) {
-            console.log("🔍 List content detected (addMessage):", content);
-            console.log("🔍 Rendered HTML (addMessage):", renderedHTML);
+        // if (content.includes('-') || content.includes('*') || /\d+\./.test(content)) {
+        //     console.log("🔍 List content detected (addMessage):", content);
+        //     console.log("🔍 Rendered HTML (addMessage):", renderedHTML);
             
-            // Check if lists are actually in the rendered HTML
-            if (renderedHTML.includes('<ul>') || renderedHTML.includes('<ol>') || renderedHTML.includes('<li>')) {
-                console.log("✅ Lists properly rendered in HTML (addMessage)");
-            } else {
-                console.log("⚠️ Lists not found in rendered HTML (addMessage)");
-            }
-        }
+        //     // Check if lists are actually in the rendered HTML
+        //     if (renderedHTML.includes('<ul>') || renderedHTML.includes('<ol>') || renderedHTML.includes('<li>')) {
+        //         console.log("✅ Lists properly rendered in HTML (addMessage)");
+        //     } else {
+        //         console.log("⚠️ Lists not found in rendered HTML (addMessage)");
+        //     }
+        // }
         
         contentDiv.innerHTML = renderedHTML;
         messageDiv.appendChild(contentDiv);
@@ -410,11 +401,10 @@ function updateSubmitButton(streaming) {
 }
 
 // Modify your sendMessageStreaming function
-async function sendMessageStreaming(message, customSystemInstruction = null) {
-    // 1. Start timer when user prompt is entered
-    const startTime = performance.now();
-    console.log(`🚀 User prompt entered: "${message}"`);
-    console.log(`⏱️  Starting timer at: ${new Date().toISOString()}`);
+async function sendMessageStreaming(message, customSystemInstruction = null, userClickTime = null) {
+    // Use provided userClickTime or create new one
+    const startTime = userClickTime || performance.now();
+    console.log(`🚀 User clicked send: "${message}"`);
 
     // Add user message to chat
     addMessage(message, 'user');
@@ -447,10 +437,6 @@ async function sendMessageStreaming(message, customSystemInstruction = null) {
             payload.system_instruction = customSystemInstruction;
         }
 
-        // Log before making the request
-        const requestStartTime = performance.now();
-        console.log(`📤 [FRONTEND TIMING] Making request to backend at: ${requestStartTime}ms`);
-
         // Fetch streaming response with abort signal
         const response = await fetch('/api/chat/stream', {
             method: 'POST',
@@ -460,10 +446,6 @@ async function sendMessageStreaming(message, customSystemInstruction = null) {
             body: JSON.stringify(payload),
             signal: signal  // Pass the abort signal
         });
-
-        const requestEndTime = performance.now();
-        const requestDuration = requestEndTime - requestStartTime;
-        console.log(`📤 [FRONTEND TIMING] Request completed in ${requestDuration.toFixed(2)}ms`);
 
         if (!response.ok) {
             throw new Error('Failed to get streaming response');
@@ -498,10 +480,9 @@ async function sendMessageStreaming(message, customSystemInstruction = null) {
             // Special handling for first chunk
             if (isFirstChunk) {
                 isFirstChunk = false;
-                firstChunkTime = performance.now();
+                const firstChunkTime = performance.now();
                 const firstChunkDuration = firstChunkTime - startTime;
-                console.log(`📥 [FRONTEND TIMING] First chunk received in ${firstChunkDuration.toFixed(2)}ms`);
-                console.log("First chunk:", chunk);
+                console.log(`📥 First chunk received: ${firstChunkDuration.toFixed(2)}ms`);
                 
                 if (!chunk.trimStart().startsWith('data:')) {
                     partialChunk = 'data: {"delta": "' + chunk + '"}';
@@ -516,7 +497,7 @@ async function sendMessageStreaming(message, customSystemInstruction = null) {
                 if (line.trim() && line.startsWith('data:')) {
                     try {
                         const jsonText = line.slice(5).trim();
-                        console.log("Parsing JSON:", jsonText);
+                        // console.log("Parsing JSON:", jsonText);
                         const data = JSON.parse(jsonText);
 
                         if (data.session_id && !sessionId) {
@@ -531,7 +512,7 @@ async function sendMessageStreaming(message, customSystemInstruction = null) {
                             messageStarted = true;
                             responseStartTime = performance.now();
                             const responseStartDuration = responseStartTime - startTime;
-                            console.log(`📝 [FRONTEND TIMING] Response started in ${responseStartDuration.toFixed(2)}ms`);
+                            console.log(`📝 First content: ${responseStartDuration.toFixed(2)}ms`);
                             removeTypingIndicator();
                             chatMessages.appendChild(messageDiv);
                         }
@@ -540,25 +521,25 @@ async function sendMessageStreaming(message, customSystemInstruction = null) {
                             accumulatedContent += data.delta;
                             
                             // Debug
-                            console.log("Accumulated content:", accumulatedContent.length, "chars");
+                            // console.log("Accumulated content:", accumulatedContent.length, "chars");
                             
                             try {
                                 // Try to render markdown
                                 const rendered = md.render(accumulatedContent);
                                 contentDiv.innerHTML = rendered;
                                 
-                                // Debug: Check if lists are being rendered
-                                if (accumulatedContent.includes('-') || accumulatedContent.includes('*') || /\d+\./.test(accumulatedContent)) {
-                                    console.log("🔍 List content detected:", accumulatedContent);
-                                    console.log("🔍 Rendered HTML:", rendered);
-                                    
-                                    // Check if lists are actually in the rendered HTML
-                                    if (rendered.includes('<ul>') || rendered.includes('<ol>') || rendered.includes('<li>')) {
-                                        console.log("✅ Lists properly rendered in HTML");
-                                    } else {
-                                        console.log("⚠️ Lists not found in rendered HTML");
-                                    }
-                                }
+                                                            // Debug: Check if lists are being rendered
+                            // if (accumulatedContent.includes('-') || accumulatedContent.includes('*') || /\d+\./.test(accumulatedContent)) {
+                            //     console.log("🔍 List content detected:", accumulatedContent);
+                            //     console.log("🔍 Rendered HTML:", rendered);
+                                
+                            //     // Check if lists are actually in the rendered HTML
+                            //     if (rendered.includes('<ul>') || rendered.includes('<ol>') || rendered.includes('<li>')) {
+                            //         console.log("✅ Lists properly rendered in HTML");
+                            //     } else {
+                            //         console.log("⚠️ Lists not found in rendered HTML");
+                            //     }
+                            // }
                             } catch (e) {
                                 console.error("Error rendering markdown:", e);
                                 // Fallback to plain text
@@ -579,9 +560,7 @@ async function sendMessageStreaming(message, customSystemInstruction = null) {
                             const totalTime = endTime - startTime;
                             const responseTime = responseStartTime ? endTime - responseStartTime : 0;
                             
-                            console.log(`✅ [FRONTEND TIMING] Response completed in ${totalTime.toFixed(2)}ms`);
-                            console.log(`⏱️ [FRONTEND TIMING] Response generation time: ${responseTime.toFixed(2)}ms`);
-                            console.log(`📊 [FRONTEND TIMING] Response length: ${accumulatedContent.length} characters`);
+                            console.log(`✅ Complete: ${totalTime.toFixed(2)}ms total, ${responseTime.toFixed(2)}ms generation`);
                             
                             // Refresh sessions list to update titles
                             await loadSessions();
@@ -593,7 +572,8 @@ async function sendMessageStreaming(message, customSystemInstruction = null) {
                         if (!messageStarted) {
                             messageStarted = true;
                             responseStartTime = performance.now();
-                            console.log(`📝 Response started at: ${new Date().toISOString()}`);
+                            const responseStartDuration = responseStartTime - startTime;
+                            console.log(`📝 Fallback response: ${responseStartDuration.toFixed(2)}ms`);
                             removeTypingIndicator();
                             chatMessages.appendChild(messageDiv);
                         }
@@ -604,10 +584,10 @@ async function sendMessageStreaming(message, customSystemInstruction = null) {
                         contentDiv.innerHTML = rendered;
                         
                         // Debug: Check if lists are being rendered
-                        if (accumulatedContent.includes('-') || accumulatedContent.includes('*') || /\d+\./.test(accumulatedContent)) {
-                            console.log("🔍 List content detected (fallback):", accumulatedContent);
-                            console.log("🔍 Rendered HTML (fallback):", rendered);
-                        }
+                        // if (accumulatedContent.includes('-') || accumulatedContent.includes('*') || /\d+\./.test(accumulatedContent)) {
+                        //     console.log("🔍 List content detected (fallback):", accumulatedContent);
+                        //     console.log("🔍 Rendered HTML (fallback):", rendered);
+                        // }
                         
                         chatMessages.scrollTop = chatMessages.scrollHeight;
                     }
@@ -631,11 +611,11 @@ async function sendMessageStreaming(message, customSystemInstruction = null) {
                      const rendered = md.render(accumulatedContent);
                      contentDiv.innerHTML = rendered;
                      
-                     // Debug: Check if lists are being rendered
-                     if (accumulatedContent.includes('-') || accumulatedContent.includes('*') || /\d+\./.test(accumulatedContent)) {
-                         console.log("🔍 List content detected (final):", accumulatedContent);
-                         console.log("🔍 Rendered HTML (final):", rendered);
-                     }
+                                             // Debug: Check if lists are being rendered
+                        // if (accumulatedContent.includes('-') || accumulatedContent.includes('*') || /\d+\./.test(accumulatedContent)) {
+                        //     console.log("🔍 List content detected (final):", accumulatedContent);
+                        //     console.log("🔍 Rendered HTML (final):", rendered);
+                        // }
                 }
             } catch (e) {
                 // Handle as plain text
@@ -644,11 +624,11 @@ async function sendMessageStreaming(message, customSystemInstruction = null) {
                 const rendered = md.render(accumulatedContent);
                 contentDiv.innerHTML = rendered;
                 
-                // Debug: Check if lists are being rendered
-                if (accumulatedContent.includes('-') || accumulatedContent.includes('*') || /\d+\./.test(accumulatedContent)) {
-                    console.log("🔍 List content detected (partial):", accumulatedContent);
-                    console.log("🔍 Rendered HTML (partial):", rendered);
-                }
+                                        // Debug: Check if lists are being rendered
+                        // if (accumulatedContent.includes('-') || accumulatedContent.includes('*') || /\d+\./.test(accumulatedContent)) {
+                        //     console.log("🔍 List content detected (partial):", accumulatedContent);
+                        //     console.log("🔍 Rendered HTML (partial):", rendered);
+                        // }
             }
         }
         
@@ -691,13 +671,13 @@ function clearChat(keepSystemMessages = true) {
         // Add welcome message if it doesn't exist
         const welcomeMessage = chatMessages.querySelector('.message.system');
         if (!welcomeMessage) {
-            addMessage('Welcome to FCIAS Chatbot! How can I help you today?', 'system');
+            addMessage('Welcome to AI Chatbot! How can I help you today?', 'system');
         }
     } else {
         // Clear all messages including system messages
         chatMessages.innerHTML = '';
         // Add fresh welcome message
-        addMessage('Welcome to FCIAS Chatbot! How can I help you today?', 'system');
+        addMessage('Welcome to AI Chatbot! How can I help you today?', 'system');
     }
 }
 
@@ -871,18 +851,11 @@ async function createNewSession() {
             localStorage.removeItem('chatSessionId');
             
             // Close the sidebar when creating a new chat
-            console.log("🔧 Attempting to close sidebar...");
-            console.log("📱 Window width:", window.innerWidth);
-            
             if (window.innerWidth <= 768) {
-                console.log("📱 Mobile: Setting sidebarOpen to false");
                 AppState.setSidebarOpen(false);
             } else {
-                console.log("🖥️ Desktop: Setting sidebarCollapsed to true");
                 AppState.setSidebarCollapsed(true);
             }
-            
-            console.log("🔧 After setting state:", AppState.ui.sidebarOpen, AppState.ui.sidebarCollapsed);
             
             // Update UI
             renderSessionsList();
@@ -1228,7 +1201,6 @@ function handleChatSubmit(event) {
     
     // Start timing from user click
     const userClickTime = performance.now();
-    console.log(`🚀 [FRONTEND TIMING] User clicked send at: ${userClickTime}ms`);
     
     // If we're currently streaming, abort the stream
     if (AppState.isStreaming() && currentStreamController) {
@@ -1243,10 +1215,10 @@ function handleChatSubmit(event) {
     userInput.value = '';
     
     // Log message being sent
-    console.log(`📤 [FRONTEND TIMING] Sending message: "${message}"`);
+    // console.log(`📤 [FRONTEND TIMING] Sending message: "${message}"`);
     
-    // Send message
-    sendMessageStreaming(message);
+    // Send message with timing context
+    sendMessageStreaming(message, null, userClickTime);
 }
 
 // Sidebar resize functions
@@ -1610,6 +1582,7 @@ ${context}
 Please respond to the user's question: "${userQuery}"`;
 
         // Use the existing streaming response function with the search context
+        // Note: This is called from search, so we don't have the original user click time
         await sendMessageStreaming(userQuery, systemInstruction);
         
     } catch (error) {

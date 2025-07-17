@@ -34,7 +34,7 @@ def test_model_loading():
         
         try:
             response = requests.post(
-                "http://localhost:8000/api/chat/stream",
+                "http://localhost:8010/api/chat/stream",
                 json={"message": message},
                 headers={"Content-Type": "application/json"},
                 stream=True
@@ -79,7 +79,7 @@ def test_service_initialization():
     
     # Test the test endpoint to see initialization logs
     try:
-        response = requests.get("http://localhost:8000/test")
+        response = requests.get("http://localhost:8010/test")
         if response.status_code == 200:
             print("✅ Server is running and responding")
             print("📋 Check server logs for service initialization timing")
@@ -87,10 +87,10 @@ def test_service_initialization():
             print(f"❌ Server test failed: {response.status_code}")
     except Exception as e:
         print(f"❌ Cannot connect to server: {str(e)}")
-        print("💡 Make sure the server is running on http://localhost:8000")
+        print("💡 Make sure the server is running on http://localhost:8010")
 
 if __name__ == "__main__":
-    print("FCI-Chatbot Model Loading Test")
+    print("AI-Chatbot Model Loading Test")
     print("=" * 60)
     print("This script will help identify if models are being loaded once or multiple times.")
     print("Make sure your server is running with --log-level info")

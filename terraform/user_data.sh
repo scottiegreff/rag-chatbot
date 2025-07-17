@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# User data script for FCI Chatbot EC2 instance
+# User data script for AI Chatbot EC2 instance
 # This script runs when the instance starts
 
 set -e
@@ -28,7 +28,7 @@ mkdir -p /opt/${project_name}
 cd /opt/${project_name}
 
 # Clone the application (you'll need to replace with your actual repository)
-# git clone https://github.com/yourusername/FCI-Chatbot.git .
+# git clone https://github.com/yourusername/ai-chatbot.git .
 
 # For now, we'll create a simple setup script
 cat > setup.sh << 'EOF'
@@ -42,9 +42,9 @@ services:
   # PostgreSQL Database
   postgres:
     image: postgres:15-alpine
-    container_name: fci-chatbot-postgres
+    container_name: ai-chatbot-postgres
     environment:
-      POSTGRES_DB: fci_chatbot
+      POSTGRES_DB: ai_chatbot
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password1234}
     volumes:
@@ -63,7 +63,7 @@ services:
   # Weaviate Vector Database
   weaviate:
     image: semitechnologies/weaviate:1.25.4
-    container_name: fci-chatbot-weaviate
+    container_name: ai-chatbot-weaviate
     environment:
       QUERY_DEFAULTS_LIMIT: 25
       AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
@@ -89,12 +89,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.backend
-    container_name: fci-chatbot-backend
+    container_name: ai-chatbot-backend
     environment:
       # Database Configuration
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_NAME: fci_chatbot
+      DB_NAME: ai_chatbot
       DB_USER: postgres
       DB_PASSWORD: ${POSTGRES_PASSWORD:-password1234}
       
@@ -115,7 +115,7 @@ services:
       
       # API Configuration
       HOST: 0.0.0.0
-      PORT: 8000
+      PORT: 8010
       DEBUG: false
       CORS_ORIGINS: "*"
       
@@ -139,9 +139,9 @@ services:
       - sentence_transformer_cache:/root/.cache/huggingface
       - llm_cache:/root/.cache/llama-cpp
     ports:
-      - "8000:8000"
+      - "8010:8010"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/database/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8010/api/database/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -181,16 +181,16 @@ fi
 # Start the application
 docker-compose -f docker-compose.prod.yml up -d
 
-echo "FCI Chatbot setup complete!"
-echo "Application will be available at: http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4):8000"
+echo "AI Chatbot setup complete!"
+echo "Application will be available at: http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4):8010"
 EOF
 
 chmod +x setup.sh
 
 # Create a systemd service for the application
-cat > /etc/systemd/system/fci-chatbot.service << 'EOF'
+cat > /etc/systemd/system/ai-chatbot.service << 'EOF'
 [Unit]
-Description=FCI Chatbot Application
+Description=AI Chatbot Application
 After=docker.service
 Requires=docker.service
 
@@ -206,15 +206,15 @@ WantedBy=multi-user.target
 EOF
 
 # Enable and start the service
-systemctl enable fci-chatbot.service
-systemctl start fci-chatbot.service
+systemctl enable ai-chatbot.service
+systemctl start ai-chatbot.service
 
 # Create a simple health check script
 cat > /opt/${project_name}/health_check.sh << 'EOF'
 #!/bin/bash
 
 # Check if the application is running
-if curl -f http://localhost:8000/api/database/health > /dev/null 2>&1; then
+if curl -f http://localhost:8010/api/database/health > /dev/null 2>&1; then
     echo "Application is healthy"
     exit 0
 else
@@ -226,7 +226,7 @@ EOF
 chmod +x /opt/${project_name}/health_check.sh
 
 # Set up log rotation
-cat > /etc/logrotate.d/fci-chatbot << 'EOF'
+cat > /etc/logrotate.d/ai-chatbot << 'EOF'
 /opt/${project_name}/logs/*.log {
     daily
     missingok

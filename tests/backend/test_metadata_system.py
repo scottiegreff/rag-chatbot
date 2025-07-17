@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 
 # Configuration
-BASE_URL = "http://localhost:8000"
+BASE_URL = "http://localhost:8010"
 API_BASE = f"{BASE_URL}/api"
 
 def test_metadata_upload():
