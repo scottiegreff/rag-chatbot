@@ -229,6 +229,15 @@ def get_product_reviews(product_id: int) -> List[Review]:
     finally:
         db.close()
 
+def get_all_inventory() -> List[Inventory]:
+    """Get all inventory items"""
+    db = SessionLocal()
+    try:
+        inventory = db.query(Inventory).all()
+        return inventory
+    finally:
+        db.close()
+
 def get_product_inventory(product_id: int) -> Optional[Inventory]:
     db = SessionLocal()
     try:

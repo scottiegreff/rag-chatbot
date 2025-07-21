@@ -1,19 +1,13 @@
 // Store the session ID
 let sessionId = null;
 
-// Test log to verify JavaScript is loading
-console.log('🚀 [TEST] Chat.js loaded successfully at:', new Date().toISOString());
-
 // Near the top with other variables, add an AbortController
 let currentStreamController = null;
 let isStreaming = false;
 
-// Store the uploaded file
-let uploadedFile = null;
-
 // Session management variables
-let currentSession = null;
 let sessions = [];
+let currentSession = null; // Current active session
 let isEditingSession = false; // Flag to track if we're currently editing a session title
 
 // Centralized State Management
@@ -29,20 +23,20 @@ const AppState = {
         streaming: false,
         uploading: false
     },
-    
+
     // Session State
     session: {
         currentSessionId: null,
         editingSessionId: null,
         sessions: []
     },
-    
+
     // Chat State
     chat: {
         messages: [],
         currentStreamController: null
     },
-    
+
     // Modal State
     modal: {
         uploadForm: {
@@ -56,27 +50,25 @@ const AppState = {
             uploadedBy: ''
         }
     },
-    
+
     // Methods to update state
     updateUI(newState) {
         this.ui = { ...this.ui, ...newState };
         this.renderUI();
     },
-    
+
     updateSession(newState) {
         this.session = { ...this.session, ...newState };
         this.renderSessions();
     },
-    
+
     updateModal(newState) {
         this.modal = { ...this.modal, ...newState };
         this.renderModal();
     },
-    
+
     // Render methods
     renderUI() {
-        // console.log("🎨 renderUI called with state:", this.ui);
-        
         // Chat interface
         if (chatInterface) {
             if (this.ui.chatOpen) {
@@ -85,7 +77,7 @@ const AppState = {
                 chatInterface.classList.remove('open');
             }
         }
-        
+
         // Chat toggle button
         if (chatToggleBtn) {
             if (this.ui.chatOpen) {
@@ -96,17 +88,20 @@ const AppState = {
                 chatToggleBtn.style.opacity = '1';
             }
         }
-        
+
         // Sidebar
         if (sidebar) {
+            console.log('Rendering sidebar - sidebarOpen:', this.ui.sidebarOpen, 'sidebarCollapsed:', this.ui.sidebarCollapsed, 'window width:', window.innerWidth);
             if (window.innerWidth <= 768) {
                 // Mobile: use sidebarOpen state
                 if (this.ui.sidebarOpen) {
                     sidebar.classList.add('expanded');
                     sidebar.classList.remove('collapsed');
+                    console.log('Mobile: sidebar expanded');
                 } else {
                     sidebar.classList.remove('expanded');
-                    sidebar.classList.remove('collapsed');
+                    sidebar.classList.add('collapsed');
+                    console.log('Mobile: sidebar collapsed');
                 }
             } else {
                 // Desktop: use sidebarCollapsed state
@@ -130,7 +125,7 @@ const AppState = {
                 }
             }
         }
-        
+
         // Modal
         if (uploadModal) {
             if (this.ui.modalOpen && this.ui.modalType === 'upload') {
@@ -141,7 +136,7 @@ const AppState = {
                 document.body.style.overflow = '';
             }
         }
-        
+
         // Focus management
         if (this.ui.chatOpen && userInput) {
             setTimeout(() => {
@@ -149,14 +144,14 @@ const AppState = {
             }, 300);
         }
     },
-    
+
     renderSessions() {
         // Update session list rendering
         if (sessionsList) {
             renderSessionsList();
         }
     },
-    
+
     renderModal() {
         // Update modal form fields
         if (this.ui.modalType === 'upload') {
@@ -169,7 +164,7 @@ const AppState = {
             if (modalUploadedByInput) modalUploadedByInput.value = this.modal.uploadForm.uploadedBy;
         }
     },
-    
+
     // State getters
     isChatOpen() { return this.ui.chatOpen; },
     isModalOpen() { return this.ui.modalOpen; },
@@ -177,14 +172,17 @@ const AppState = {
     isStreaming() { return this.ui.streaming; },
     isUploading() { return this.ui.uploading; },
     isSessionEditing() { return this.ui.sessionEditing; },
-    
+
     // State setters
     setChatOpen(open) { this.updateUI({ chatOpen: open }); },
     setModalOpen(open, type = null) { this.updateUI({ modalOpen: open, modalType: type }); },
     setStreaming(streaming) { this.updateUI({ streaming }); },
     setUploading(uploading) { this.updateUI({ uploading }); },
     setSessionEditing(editing) { this.updateUI({ sessionEditing: editing }); },
-    setSidebarOpen(open) { this.updateUI({ sidebarOpen: open }); },
+    setSidebarOpen(open) {
+        console.log('setSidebarOpen called with:', open);
+        this.updateUI({ sidebarOpen: open });
+    },
     setSidebarCollapsed(collapsed) { this.updateUI({ sidebarCollapsed: collapsed }); }
 };
 
@@ -194,9 +192,6 @@ function initializeAppState() {
     AppState.ui.streaming = isStreaming;
     AppState.ui.sessionEditing = isEditingSession;
 }
-
-// At the beginning of your chat.js file
-console.log("Checking for markdown-it:", typeof window.markdownit);
 
 // At the top, declare md as let instead of const to allow reassignment
 let md = { render: text => text.replace(/\n/g, '<br>') }; // Simple fallback renderer
@@ -232,7 +227,7 @@ function loadMarkdownIt() {
             resolve();
             return;
         }
-        
+
         const script = document.createElement('script');
         script.src = 'https://cdn.jsdelivr.net/npm/markdown-it@12/dist/markdown-it.min.js';
         script.onload = () => {
@@ -275,7 +270,9 @@ let sidebar = null;
 let sessionsList = null;
 let newChatBtn = null;
 let sidebarToggle = null;
+let mobileSidebarToggle = null;
 let sidebarResizeHandle = null;
+let sidebarCloseBtn = null;
 let searchBtn = null;
 
 // Sidebar resize variables
@@ -287,9 +284,6 @@ let startWidth = 0;
 let chatWidget = null;
 let chatToggleBtn = null;
 let chatInterface = null;
-
-// Chat widget state
-let isChatOpen = false;
 
 // Modal and metadata upload functionality
 let uploadModal = null;
@@ -310,17 +304,17 @@ let closeModalBtn = null;
 function showTypingIndicator() {
     const indicator = document.createElement('div');
     indicator.className = 'message assistant typing-indicator';
-    
+
     // Create dots that match the CSS classes
     indicator.innerHTML = `
         <div class="typing-dot"></div>
         <div class="typing-dot"></div>
         <div class="typing-dot"></div>
     `;
-    
+
     indicator.id = 'typing-indicator';
     chatMessages.appendChild(indicator);
-    
+
     // Scroll to bottom
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
@@ -337,32 +331,15 @@ function removeTypingIndicator() {
 function addMessage(content, role, isMarkdown = false) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${role}`;
-    
+
     // Check if content contains HTML (like img tags for icons)
     const containsHTML = /<[^>]*>/g.test(content);
-    
+
     if (isMarkdown || role === 'assistant') {  // Auto-enable markdown for assistant messages
         const contentDiv = document.createElement('div');
         contentDiv.className = 'message-content';
-        
-        // Debug the markdown rendering
-        // console.log("Rendering markdown:", content.substring(0, 50) + "...");
+
         const renderedHTML = md.render(content);
-        // console.log("Rendered HTML:", renderedHTML.substring(0, 50) + "...");
-        
-        // Debug: Check if lists are being rendered
-        // if (content.includes('-') || content.includes('*') || /\d+\./.test(content)) {
-        //     console.log("🔍 List content detected (addMessage):", content);
-        //     console.log("🔍 Rendered HTML (addMessage):", renderedHTML);
-            
-        //     // Check if lists are actually in the rendered HTML
-        //     if (renderedHTML.includes('<ul>') || renderedHTML.includes('<ol>') || renderedHTML.includes('<li>')) {
-        //         console.log("✅ Lists properly rendered in HTML (addMessage)");
-        //     } else {
-        //         console.log("⚠️ Lists not found in rendered HTML (addMessage)");
-        //     }
-        // }
-        
         contentDiv.innerHTML = renderedHTML;
         messageDiv.appendChild(contentDiv);
     } else if (containsHTML) {
@@ -375,9 +352,9 @@ function addMessage(content, role, isMarkdown = false) {
         // For plain text messages
         messageDiv.textContent = content;
     }
-    
+
     chatMessages.appendChild(messageDiv);
-    
+
     // Scroll to bottom
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
@@ -404,7 +381,6 @@ function updateSubmitButton(streaming) {
 async function sendMessageStreaming(message, customSystemInstruction = null, userClickTime = null) {
     // Use provided userClickTime or create new one
     const startTime = userClickTime || performance.now();
-    console.log(`🚀 User clicked send: "${message}"`);
 
     // Add user message to chat
     addMessage(message, 'user');
@@ -422,16 +398,16 @@ async function sendMessageStreaming(message, customSystemInstruction = null, use
     try {
         // Clear the input field after sending
         userInput.value = '';
-        
+
         // Prepare payload
         const payload = {
             message: message
         };
-        
+
         if (sessionId) {
             payload.session_id = sessionId;
         }
-        
+
         // Add custom system instruction if provided
         if (customSystemInstruction) {
             payload.system_instruction = customSystemInstruction;
@@ -454,7 +430,7 @@ async function sendMessageStreaming(message, customSystemInstruction = null, use
         // Create a message div for the response that we'll build gradually
         const messageDiv = document.createElement('div');
         messageDiv.className = 'message assistant';
-        
+
         // Create content div for markdown rendering
         const contentDiv = document.createElement('div');
         contentDiv.className = 'message-content';
@@ -471,25 +447,24 @@ async function sendMessageStreaming(message, customSystemInstruction = null, use
 
         while (true) {
             const { value, done } = await reader.read();
-            
+
             if (done) break;
 
             // Decode and process chunks
             const chunk = decoder.decode(value, { stream: true });
-            
+
             // Special handling for first chunk
             if (isFirstChunk) {
                 isFirstChunk = false;
                 const firstChunkTime = performance.now();
                 const firstChunkDuration = firstChunkTime - startTime;
-                console.log(`📥 First chunk received: ${firstChunkDuration.toFixed(2)}ms`);
-                
+
                 if (!chunk.trimStart().startsWith('data:')) {
                     partialChunk = 'data: {"delta": "' + chunk + '"}';
                     continue;
                 }
             }
-            
+
             const lines = (partialChunk + chunk).split('\n');
             partialChunk = lines.pop() || '';
 
@@ -497,860 +472,663 @@ async function sendMessageStreaming(message, customSystemInstruction = null, use
                 if (line.trim() && line.startsWith('data:')) {
                     try {
                         const jsonText = line.slice(5).trim();
-                        // console.log("Parsing JSON:", jsonText);
                         const data = JSON.parse(jsonText);
 
-                        if (data.session_id && !sessionId) {
-                            sessionId = data.session_id;
-                            window.sessionId = data.session_id;  // Also set the window variable
-                            localStorage.setItem('chatSessionId', sessionId);
-                        }
-                        
-                        // Only when we have actual content, remove the typing indicator
-                        // and add the message div to the chat
-                        if (data.delta && !messageStarted) {
-                            messageStarted = true;
-                            responseStartTime = performance.now();
-                            const responseStartDuration = responseStartTime - startTime;
-                            console.log(`📝 First content: ${responseStartDuration.toFixed(2)}ms`);
-                            removeTypingIndicator();
-                            chatMessages.appendChild(messageDiv);
-                        }
-
                         if (data.delta) {
-                            accumulatedContent += data.delta;
-                            
-                            // Debug
-                            // console.log("Accumulated content:", accumulatedContent.length, "chars");
-                            
-                            try {
-                                // Try to render markdown
-                                const rendered = md.render(accumulatedContent);
-                                contentDiv.innerHTML = rendered;
-                                
-                                                            // Debug: Check if lists are being rendered
-                            // if (accumulatedContent.includes('-') || accumulatedContent.includes('*') || /\d+\./.test(accumulatedContent)) {
-                            //     console.log("🔍 List content detected:", accumulatedContent);
-                            //     console.log("🔍 Rendered HTML:", rendered);
-                                
-                            //     // Check if lists are actually in the rendered HTML
-                            //     if (rendered.includes('<ul>') || rendered.includes('<ol>') || rendered.includes('<li>')) {
-                            //         console.log("✅ Lists properly rendered in HTML");
-                            //     } else {
-                            //         console.log("⚠️ Lists not found in rendered HTML");
-                            //     }
-                            // }
-                            } catch (e) {
-                                console.error("Error rendering markdown:", e);
-                                // Fallback to plain text
-                                contentDiv.textContent = accumulatedContent;
+                            // Remove typing indicator on first content
+                            if (!messageStarted) {
+                                messageStarted = true;
+                                removeTypingIndicator();
+                                chatMessages.appendChild(messageDiv);
+                                responseStartTime = performance.now();
                             }
-                            
-                            applyHighlighting();
+
+                            // Accumulate content
+                            accumulatedContent += data.delta;
+
+                            // Render markdown and update content
+                            const rendered = md.render(accumulatedContent);
+                            contentDiv.innerHTML = rendered;
+
+                            // Scroll to bottom
                             chatMessages.scrollTop = chatMessages.scrollHeight;
                         }
-
-                        if (data.error) {
-                            contentDiv.innerHTML = `<p class="error">Error: ${data.error}</p>`;
-                        }
-
-                        // 2. Log when response is complete
-                        if (data.done) {
-                            const endTime = performance.now();
-                            const totalTime = endTime - startTime;
-                            const responseTime = responseStartTime ? endTime - responseStartTime : 0;
-                            
-                            console.log(`✅ Complete: ${totalTime.toFixed(2)}ms total, ${responseTime.toFixed(2)}ms generation`);
-                            
-                            // Refresh sessions list to update titles
-                            await loadSessions();
-                        }
                     } catch (e) {
-                        console.log('Error parsing JSON:', e, 'Line:', line);
-                        
-                        // Only add message container when we start getting content
-                        if (!messageStarted) {
-                            messageStarted = true;
-                            responseStartTime = performance.now();
-                            const responseStartDuration = responseStartTime - startTime;
-                            console.log(`📝 Fallback response: ${responseStartDuration.toFixed(2)}ms`);
-                            removeTypingIndicator();
-                            chatMessages.appendChild(messageDiv);
+                        // Handle non-JSON lines gracefully
+                        if (line.trim() !== 'data: [DONE]') {
+                            console.log('Error parsing JSON:', e, 'Line:', line);
                         }
-                        
-                        const textChunk = line.slice(5).trim();
-                        accumulatedContent += textChunk;
-                        const rendered = md.render(accumulatedContent);
-                        contentDiv.innerHTML = rendered;
-                        
-                        // Debug: Check if lists are being rendered
-                        // if (accumulatedContent.includes('-') || accumulatedContent.includes('*') || /\d+\./.test(accumulatedContent)) {
-                        //     console.log("🔍 List content detected (fallback):", accumulatedContent);
-                        //     console.log("🔍 Rendered HTML (fallback):", rendered);
-                        // }
-                        
-                        chatMessages.scrollTop = chatMessages.scrollHeight;
                     }
                 }
             }
         }
-        
-        // If we never started the message (no data received),
-        // do it now before processing any remaining chunk
-        if (!messageStarted) {
-            removeTypingIndicator();
-            chatMessages.appendChild(messageDiv);
+
+        // Final rendering after stream completes
+        if (messageStarted) {
+            const finalRendered = md.render(accumulatedContent);
+            contentDiv.innerHTML = finalRendered;
+
+            const totalTime = performance.now() - startTime;
+            const responseTime = responseStartTime ? performance.now() - responseStartTime : 0;
         }
-        
-        // Process any remaining partial chunk
-        if (partialChunk && partialChunk.startsWith('data:')) {
-             try {
-                const data = JSON.parse(partialChunk.slice(5).trim());
-                if (data.delta) {
-                     accumulatedContent += data.delta;
-                     const rendered = md.render(accumulatedContent);
-                     contentDiv.innerHTML = rendered;
-                     
-                                             // Debug: Check if lists are being rendered
-                        // if (accumulatedContent.includes('-') || accumulatedContent.includes('*') || /\d+\./.test(accumulatedContent)) {
-                        //     console.log("🔍 List content detected (final):", accumulatedContent);
-                        //     console.log("🔍 Rendered HTML (final):", rendered);
-                        // }
-                }
-            } catch (e) {
-                // Handle as plain text
-                const textChunk = partialChunk.slice(5).trim();
-                accumulatedContent += textChunk;
-                const rendered = md.render(accumulatedContent);
-                contentDiv.innerHTML = rendered;
-                
-                                        // Debug: Check if lists are being rendered
-                        // if (accumulatedContent.includes('-') || accumulatedContent.includes('*') || /\d+\./.test(accumulatedContent)) {
-                        //     console.log("🔍 List content detected (partial):", accumulatedContent);
-                        //     console.log("🔍 Rendered HTML (partial):", rendered);
-                        // }
-            }
-        }
-        
-        // Scroll to the bottom
-                 chatMessages.scrollTop = chatMessages.scrollHeight;
 
     } catch (error) {
-        // Check if this was an abort error
         if (error.name === 'AbortError') {
             console.log('Stream was stopped by user');
-            removeTypingIndicator();
-            addMessage('Response stopped by user.', 'system');
         } else {
             console.error('Streaming error:', error);
             removeTypingIndicator();
-            addMessage('Sorry, there was an error processing your message. Please try again.', 'system');
+            addMessage('Sorry, I encountered an error. Please try again.', 'system');
         }
     } finally {
-        // Always change button back to send mode
+        // Reset button state
         updateSubmitButton(false);
         currentStreamController = null;
     }
 }
 
-// Add this function to apply syntax highlighting to code blocks
-function applyHighlighting() {
-    if (window.hljs) {
-        document.querySelectorAll('pre code').forEach((block) => {
-            hljs.highlightBlock(block);
-        });
-    }
-}
-
+// Function to clear chat messages
 function clearChat(keepSystemMessages = true) {
     if (keepSystemMessages) {
-        // Clear all messages except the welcome message
-        const messages = chatMessages.querySelectorAll('.message:not(.system)');
-        messages.forEach(message => message.remove());
-        
-        // Add welcome message if it doesn't exist
-        const welcomeMessage = chatMessages.querySelector('.message.system');
-        if (!welcomeMessage) {
-            addMessage('Welcome to AI Chatbot! How can I help you today?', 'system');
-        }
-    } else {
-        // Clear all messages including system messages
+        // Keep only system messages
+        const systemMessages = Array.from(chatMessages.children).filter(msg =>
+            msg.classList.contains('system')
+        );
         chatMessages.innerHTML = '';
-        // Add fresh welcome message
-        addMessage('Welcome to AI Chatbot! How can I help you today?', 'system');
+        systemMessages.forEach(msg => chatMessages.appendChild(msg));
+    } else {
+        // Clear all messages
+        chatMessages.innerHTML = '';
     }
 }
 
-// Session Management Functions
+// Load sessions from the backend
 async function loadSessions() {
     try {
         const response = await fetch('/api/sessions');
         if (response.ok) {
             sessions = await response.json();
-            renderSessionsList();
-            
-            // If no current session and we have sessions, load the first one
+            AppState.updateSession({ sessions: sessions });
+
+            // Auto-select first session if none selected
             if (!currentSession && sessions.length > 0) {
+                currentSession = sessions[0];
                 await switchToSession(sessions[0].session_id);
             }
         }
     } catch (error) {
-        console.error('Error loading sessions:', error);
+        console.error('Failed to load sessions:', error);
     }
 }
 
+// Render the sessions list
 function renderSessionsList() {
+    if (!sessionsList) return;
+
     sessionsList.innerHTML = '';
-    
+
     sessions.forEach(session => {
         const sessionItem = document.createElement('div');
         sessionItem.className = 'session-item';
+        sessionItem.dataset.sessionId = session.session_id;
+
+        // Highlight current session
         if (currentSession && currentSession.session_id === session.session_id) {
             sessionItem.classList.add('active');
         }
-        
-        sessionItem.innerHTML = `
-            <span class="session-title" data-session-id="${session.session_id}">${session.title}</span>
-            <input type="text" class="session-title-edit" data-session-id="${session.session_id}" value="${session.title}" style="display: none;">
-            <div class="session-actions">
-                <button class="session-action-btn edit-btn" data-session-id="${session.session_id}" title="Edit title">
-                    <img src="/static/icons/edit.svg" alt="Edit" class="icon-svg" />
-                </button>
-                <button class="session-action-btn save-btn" data-session-id="${session.session_id}" title="Save title" style="display: none;">
-                    <img src="/static/icons/save.svg" alt="Save" class="icon-svg" />
-                </button>
-                <button class="session-action-btn cancel-btn" data-session-id="${session.session_id}" title="Cancel edit" style="display: none;">
-                    <img src="/static/icons/cancel.svg" alt="Cancel" class="icon-svg" />
-                </button>
-                <button class="session-action-btn" onclick="deleteSession('${session.session_id}')" title="Delete session">
-                    <img src="/static/icons/delete.svg" alt="Delete" class="icon-svg" />
-                </button>
-            </div>
-        `;
-        
-        // Add event listeners for inline editing
-        const editBtn = sessionItem.querySelector('.edit-btn');
-        const saveBtn = sessionItem.querySelector('.save-btn');
-        const cancelBtn = sessionItem.querySelector('.cancel-btn');
-        const titleSpan = sessionItem.querySelector('.session-title');
-        const titleInput = sessionItem.querySelector('.session-title-edit');
-        
-        editBtn.addEventListener('click', (e) => {
+
+        // Create session content
+        const sessionContent = document.createElement('div');
+        sessionContent.className = 'session-content';
+
+        const titleSpan = document.createElement('span');
+        titleSpan.className = 'session-title';
+        titleSpan.textContent = session.title || 'Untitled Session';
+        sessionContent.appendChild(titleSpan);
+
+        const dateSpan = document.createElement('span');
+        dateSpan.className = 'session-date';
+        const date = new Date(session.created_at);
+        dateSpan.textContent = date.toLocaleDateString();
+        sessionContent.appendChild(dateSpan);
+
+        sessionItem.appendChild(sessionContent);
+
+        // Add edit and delete buttons
+        const actionsDiv = document.createElement('div');
+        actionsDiv.className = 'session-actions';
+
+        const editBtn = document.createElement('button');
+        editBtn.className = 'session-edit-btn';
+        editBtn.innerHTML = '<img src="/static/icons/edit.svg" alt="Edit" />';
+        editBtn.onclick = (e) => {
             e.stopPropagation();
             startInlineEdit(session.session_id);
-        });
-        
-        saveBtn.addEventListener('click', (e) => {
-            e.preventDefault();
+        };
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'session-delete-btn';
+        deleteBtn.innerHTML = '<img src="/static/icons/delete.svg" alt="Delete" />';
+        deleteBtn.onclick = (e) => {
             e.stopPropagation();
-            console.log('Save button clicked for session:', session.session_id);
-            saveInlineEdit(session.session_id);
-        });
-        
-        cancelBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            console.log('Cancel button clicked for session:', session.session_id);
-            cancelInlineEdit(session.session_id);
-        });
-        
-        titleInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                saveInlineEdit(session.session_id);
-            } else if (e.key === 'Escape') {
-                e.preventDefault();
-                cancelInlineEdit(session.session_id);
-            }
-        });
-        
-        titleInput.addEventListener('blur', () => {
-            // Small delay to allow for button clicks
-            setTimeout(() => {
-                // Only cancel if we're still in edit mode and not clicking on save or cancel buttons
-                if (isEditingSession) {
-                    const activeElement = document.activeElement;
-                    if (!activeElement || 
-                        (!activeElement.classList.contains('save-btn') && 
-                         !activeElement.classList.contains('cancel-btn'))) {
-                        cancelInlineEdit(session.session_id);
-                    }
-                }
-            }, 150);
-        });
-        
-        sessionItem.addEventListener('click', (e) => {
-            if (!e.target.classList.contains('session-action-btn')) {
-                switchToSession(session.session_id);
-            }
-        });
-        
+            deleteSession(session.session_id);
+        };
+
+        actionsDiv.appendChild(editBtn);
+        actionsDiv.appendChild(deleteBtn);
+        sessionItem.appendChild(actionsDiv);
+
+        // Add click handler to switch sessions
+        sessionItem.onclick = () => switchToSession(session.session_id);
+
         sessionsList.appendChild(sessionItem);
     });
 }
 
+// Switch to a specific session
 async function switchToSession(targetSessionId) {
     try {
-        // Load chat history for this session
+        // Clear current chat
+        clearChat();
+
+        // Load session messages
         const response = await fetch(`/api/history/${targetSessionId}`);
         if (response.ok) {
             const messages = await response.json();
-            
-            // Clear current chat
-            clearChat(false);
-            
-            // Set current session and global sessionId - FIX: Set both local and window variables
-            currentSession = sessions.find(s => s.session_id === targetSessionId);
-            sessionId = targetSessionId;  // Set the local variable
-            window.sessionId = targetSessionId;  // Set the window variable
-            
-            // Clear any old sessionId from localStorage to prevent conflicts
-            localStorage.removeItem('sessionId');
-            localStorage.removeItem('chatSessionId');
-            
-            // Load messages
+
+            // Add messages to chat
             messages.forEach(msg => {
                 addMessage(msg.content, msg.role, msg.role === 'assistant');
             });
-            
+
+            // Update session ID
+            sessionId = targetSessionId;
+            currentSession = sessions.find(s => s.session_id === targetSessionId);
+
             // Update UI
             renderSessionsList();
-            
-            console.log(`Switched to session: ${targetSessionId}`);
         }
     } catch (error) {
-        console.error('Error switching session:', error);
+        console.error('Failed to switch session:', error);
     }
 }
 
+// Create a new session
 async function createNewSession() {
-    console.log("🚀 createNewSession function called - debugging is working!");
     try {
-        console.log("🆕 Creating new session...");
-        console.log("📱 Current window width:", window.innerWidth);
-        console.log("🔧 Current sidebar state:", AppState.ui.sidebarOpen, AppState.ui.sidebarCollapsed);
-        
         const response = await fetch('/api/session/new', {
-            method: 'POST'
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                title: 'New Chat'
+            })
         });
-        
+
         if (response.ok) {
             const newSession = await response.json();
             sessions.unshift(newSession);
-            
-            // Clear the chat interface completely for new session
-            clearChat(false);
-            
-            // Set current session and sessionId - FIX: Set both local and window variables
             currentSession = newSession;
-            sessionId = newSession.session_id;  // Set the local variable
-            window.sessionId = newSession.session_id;  // Set the window variable
-            
-            // Clear any old sessionId from localStorage to prevent conflicts
-            localStorage.removeItem('sessionId');
-            localStorage.removeItem('chatSessionId');
-            
-            // Close the sidebar when creating a new chat
+            sessionId = newSession.session_id;
+
+            // Clear chat and update UI
+            clearChat();
+            renderSessionsList();
+
+            // Auto-expand sidebar on mobile
             if (window.innerWidth <= 768) {
                 AppState.setSidebarOpen(false);
-            } else {
-                AppState.setSidebarCollapsed(true);
             }
-            
-            // Update UI
-            renderSessionsList();
-            
-            console.log(`✅ Created new session: ${newSession.session_id}`);
         }
     } catch (error) {
-        console.error('Error creating new session:', error);
+        console.error('Failed to create session:', error);
     }
 }
 
+// Delete a session
 async function deleteSession(targetSessionId) {
     try {
         const response = await fetch(`/api/session/${targetSessionId}`, {
             method: 'DELETE'
         });
-        
+
         if (response.ok) {
-            // Remove from sessions list
+            // Remove from sessions array
             sessions = sessions.filter(s => s.session_id !== targetSessionId);
-            
-            // If this was the current session, clear chat and localStorage
+
+            // Clear current session if it was deleted
             if (currentSession && currentSession.session_id === targetSessionId) {
                 currentSession = null;
-                // Fix: Set both local and window sessionId variables to null
                 sessionId = null;
-                window.sessionId = null;
-                // Clear localStorage to prevent session conflicts
-                localStorage.removeItem('sessionId');
-                localStorage.removeItem('chatSessionId');
                 clearChat();
             }
-            
+
+            // Update UI
             renderSessionsList();
         }
     } catch (error) {
-        console.error('Error deleting session:', error);
+        console.error('Failed to delete session:', error);
     }
 }
 
-// Inline editing functions
+// Start inline editing for a session title
 function startInlineEdit(sessionId) {
-    console.log('Starting inline edit for session:', sessionId);
-    isEditingSession = true;
-    
-    const sessionItem = document.querySelector(`[data-session-id="${sessionId}"]`).closest('.session-item');
+    const sessionItem = document.querySelector(`[data-session-id="${sessionId}"]`);
+    if (!sessionItem) return;
+
     const titleSpan = sessionItem.querySelector('.session-title');
-    const titleInput = sessionItem.querySelector('.session-title-edit');
-    const editBtn = sessionItem.querySelector('.edit-btn');
-    const saveBtn = sessionItem.querySelector('.save-btn');
-    const cancelBtn = sessionItem.querySelector('.cancel-btn');
-    
-    // Store original value for cancel
-    titleInput.dataset.originalValue = titleInput.value;
-    
-    // Show input, hide span
+    const originalTitle = titleSpan.textContent;
+
+    // Create input field
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'session-title-input';
+    input.value = originalTitle;
+
+    // Create save and cancel buttons
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'session-save-btn';
+    saveBtn.innerHTML = '<img src="/static/icons/save.svg" alt="Save" />';
+    saveBtn.onclick = (e) => {
+        e.stopPropagation();
+        saveInlineEdit(sessionId);
+    };
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'session-cancel-btn';
+    cancelBtn.innerHTML = '<img src="/static/icons/cancel.svg" alt="Cancel" />';
+    cancelBtn.onclick = (e) => {
+        e.stopPropagation();
+        cancelInlineEdit(sessionId);
+    };
+
+    // Replace title with input
     titleSpan.style.display = 'none';
-    titleInput.style.display = 'block';
-    
-    // Show save/cancel buttons, hide edit button
-    editBtn.style.display = 'none';
-    saveBtn.style.display = 'block';
-    cancelBtn.style.display = 'block';
-    
-    // Focus and select all text
-    titleInput.focus();
-    titleInput.select();
+    titleSpan.parentNode.insertBefore(input, titleSpan);
+
+    // Add save and cancel buttons to the existing session-actions div
+    const actionsDiv = sessionItem.querySelector('.session-actions');
+    if (actionsDiv) {
+        // Clear existing buttons and add new ones
+        actionsDiv.innerHTML = '';
+        actionsDiv.appendChild(saveBtn);
+        actionsDiv.appendChild(cancelBtn);
+        actionsDiv.style.opacity = '1'; // Make sure actions are visible
+    }
+
+    // Focus input and select text
+    input.focus();
+    input.select();
+
+    // Add enter key handler
+    input.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+            saveInlineEdit(sessionId);
+        } else if (e.key === 'Escape') {
+            cancelInlineEdit(sessionId);
+        }
+    };
+
+    // Prevent click events from bubbling up to session item
+    input.onclick = (e) => {
+        e.stopPropagation();
+    };
+
+    // Mark as editing
+    AppState.setSessionEditing(true);
 }
 
+// Save inline edit
 async function saveInlineEdit(sessionId) {
-    console.log('Saving inline edit for session:', sessionId);
-    
-    const sessionItem = document.querySelector(`[data-session-id="${sessionId}"]`).closest('.session-item');
-    if (!sessionItem) {
-        console.error('Session item not found for sessionId:', sessionId);
-        return;
-    }
-    
+    const sessionItem = document.querySelector(`[data-session-id="${sessionId}"]`);
+    if (!sessionItem) return;
+
+    const input = sessionItem.querySelector('.session-title-input');
     const titleSpan = sessionItem.querySelector('.session-title');
-    const titleInput = sessionItem.querySelector('.session-title-edit');
-    const editBtn = sessionItem.querySelector('.edit-btn');
-    const saveBtn = sessionItem.querySelector('.save-btn');
-    const cancelBtn = sessionItem.querySelector('.cancel-btn');
-    
-    const newTitle = titleInput.value.trim();
-    const originalTitle = titleSpan.textContent.trim();
-    
-    console.log('New title:', newTitle, 'Original title:', originalTitle);
-    
+    const saveBtn = sessionItem.querySelector('.session-save-btn');
+    const cancelBtn = sessionItem.querySelector('.session-cancel-btn');
+
+    const newTitle = input.value.trim();
+    const originalTitle = titleSpan.textContent;
+
+    // Validate title
     if (!newTitle) {
-        console.log('Empty title, reverting');
-        // If empty, revert to original
-        cancelInlineEdit(sessionId);
+        alert('Session title cannot be empty');
         return;
     }
-    
+
+    // Check if title changed
     if (newTitle === originalTitle) {
-        console.log('No change, exiting edit mode');
-        // No change, just exit edit mode
-        cancelInlineEdit(sessionId);
+        exitEditMode(sessionItem);
         return;
     }
-    
-    // Disable buttons during save
-    saveBtn.disabled = true;
-    cancelBtn.disabled = true;
-    saveBtn.textContent = 'Saving...';
-    
+
     try {
-        console.log('Sending API request to update title...');
+        // Update session title via API
         const response = await fetch(`/api/session/${sessionId}/title?title=${encodeURIComponent(newTitle)}`, {
             method: 'PUT'
         });
-        
-        console.log('API response status:', response.status);
-        
+
         if (response.ok) {
-            console.log('Title updated successfully');
-            // Update the session object
+            // Update local session object
             const session = sessions.find(s => s.session_id === sessionId);
             if (session) {
                 session.title = newTitle;
-                console.log('Updated session object title to:', newTitle);
             }
-            
-            // Update the display
+
+            // Update UI
             titleSpan.textContent = newTitle;
-            titleInput.value = newTitle;
-            
-            // Exit edit mode
             exitEditMode(sessionItem);
-            
-            // Refresh the sessions list to ensure UI is updated
             renderSessionsList();
         } else {
-            console.error('API request failed with status:', response.status);
-            const errorText = await response.text();
-            console.error('Error response:', errorText);
-            // Revert on error
-            cancelInlineEdit(sessionId);
+            alert('Failed to update session title');
         }
     } catch (error) {
-        console.error('Error updating session title:', error);
-        cancelInlineEdit(sessionId);
-    } finally {
-        // Re-enable buttons
-        saveBtn.disabled = false;
-        cancelBtn.disabled = false;
-        saveBtn.innerHTML = '<img src="/static/icons/save.svg" alt="Save" class="icon-svg" />';
+        console.error('Failed to update session title:', error);
+        alert('Failed to update session title');
     }
 }
 
+// Cancel inline edit
 function cancelInlineEdit(sessionId) {
-    const sessionItem = document.querySelector(`[data-session-id="${sessionId}"]`).closest('.session-item');
-    const titleSpan = sessionItem.querySelector('.session-title');
-    const titleInput = sessionItem.querySelector('.session-title-edit');
-    
-    // Restore original value
-    if (titleInput.dataset.originalValue) {
-        titleInput.value = titleInput.dataset.originalValue;
+    const sessionItem = document.querySelector(`[data-session-id="${sessionId}"]`);
+    if (sessionItem) {
+        exitEditMode(sessionItem);
     }
-    
-    exitEditMode(sessionItem);
 }
 
+// Exit edit mode
 function exitEditMode(sessionItem) {
-    console.log('Exiting edit mode');
-    isEditingSession = false;
-    
+    const input = sessionItem.querySelector('.session-title-input');
     const titleSpan = sessionItem.querySelector('.session-title');
-    const titleInput = sessionItem.querySelector('.session-title-edit');
-    const editBtn = sessionItem.querySelector('.edit-btn');
-    const saveBtn = sessionItem.querySelector('.save-btn');
-    const cancelBtn = sessionItem.querySelector('.cancel-btn');
-    
-    // Hide input, show span
-    titleSpan.style.display = 'block';
-    titleInput.style.display = 'none';
-    
-    // Show edit button, hide save/cancel buttons
-    editBtn.style.display = 'block';
-    saveBtn.style.display = 'none';
-    cancelBtn.style.display = 'none';
-    
-    // Clear original value
-    delete titleInput.dataset.originalValue;
+    const saveBtn = sessionItem.querySelector('.session-save-btn');
+    const cancelBtn = sessionItem.querySelector('.session-cancel-btn');
+
+    if (input) input.remove();
+    if (saveBtn) saveBtn.remove();
+    if (cancelBtn) cancelBtn.remove();
+
+    if (titleSpan) {
+        titleSpan.style.display = '';
+    }
+
+    AppState.setSessionEditing(false);
 }
 
-// Call it when the page loads
-window.addEventListener('DOMContentLoaded', () => {
-    loadMarkdownIt();
-    setupEventListeners();
-    initializeAppState(); // Initialize AppState after DOM is ready
-});
-
+// Setup event listeners
 function setupEventListeners() {
     // Initialize DOM elements first
     initializeDOMElements();
-    
-    // Initialize modal
-    initializeModal();
-    
+
+    // Load markdown-it
+    loadMarkdownIt();
+
     // Chat form submission
     if (chatForm) {
         chatForm.addEventListener('submit', handleChatSubmit);
     }
-    
+
+    // Chat toggle button
+    if (chatToggleBtn) {
+        chatToggleBtn.addEventListener('click', toggleChatWidget);
+    }
+
+    // Sidebar toggle (desktop)
+    if (sidebarToggle) {
+        sidebarToggle.addEventListener('click', () => {
+            AppState.setSidebarCollapsed(!AppState.ui.sidebarCollapsed);
+        });
+    }
+
+    // Mobile sidebar toggle
+    if (mobileSidebarToggle) {
+        console.log('Mobile sidebar toggle button found and event listener attached');
+        mobileSidebarToggle.addEventListener('click', () => {
+            console.log('Mobile sidebar toggle clicked');
+            console.log('Current sidebar state:', AppState.ui.sidebarOpen);
+            // Toggle the sidebar state
+            AppState.setSidebarOpen(!AppState.ui.sidebarOpen);
+            console.log('After toggle - sidebarOpen:', AppState.ui.sidebarOpen);
+        });
+    } else {
+        console.log('Mobile sidebar toggle button not found');
+    }
+
+    // Sidebar close button (works for both mobile and desktop)
+    if (sidebarCloseBtn) {
+        console.log('Sidebar close button found and event listener attached');
+        sidebarCloseBtn.addEventListener('click', () => {
+            console.log('Sidebar close button clicked');
+            console.log('Current sidebar state:', AppState.ui.sidebarOpen);
+            if (window.innerWidth <= 768) {
+                // Mobile: use sidebarOpen state
+                AppState.setSidebarOpen(false);
+                console.log('Mobile: setting sidebarOpen to false');
+            } else {
+                // Desktop: use sidebarCollapsed state
+                AppState.setSidebarCollapsed(true);
+                console.log('Desktop: setting sidebarCollapsed to true');
+            }
+            console.log('After close action - sidebarOpen:', AppState.ui.sidebarOpen, 'sidebarCollapsed:', AppState.ui.sidebarCollapsed);
+        });
+    } else {
+        console.log('Sidebar close button not found');
+    }
+
+    // New chat button
+    if (newChatBtn) {
+        newChatBtn.addEventListener('click', () => {
+            createNewSession();
+            // Close sidebar after creating new session
+            AppState.setSidebarOpen(false);
+        });
+    }
+
     // Search button
     if (searchBtn) {
         searchBtn.addEventListener('click', handleSearchClick);
     }
-    
-    // Focus input on page load
-    if (userInput) {
-        userInput.focus();
-    }
-    
-    // Chat toggle
-    if (chatToggleBtn) {
-        chatToggleBtn.addEventListener('click', toggleChatWidget);
-        console.log('Chat toggle button event listener added');
-    } else {
-        console.error('Chat toggle button not found!');
-    }
-    
-    // Sidebar toggle functionality
-    if (sidebarToggle) {
-        sidebarToggle.addEventListener('click', () => {
-            // Always open sidebar when toggle button is clicked
-            if (window.innerWidth <= 768) {
-                // Mobile: open sidebar
-                AppState.setSidebarOpen(true);
-            } else {
-                // Desktop: expand sidebar
-                AppState.setSidebarCollapsed(false);
-            }
-        });
-    }
-    
-    // Sidebar close button functionality
-    const sidebarCloseBtn = document.getElementById('sidebar-close-btn');
-    if (sidebarCloseBtn) {
-        sidebarCloseBtn.addEventListener('click', () => {
-            if (window.innerWidth <= 768) {
-                // Mobile: close sidebar
-                AppState.setSidebarOpen(false);
-            } else {
-                // Desktop: collapse sidebar
-                AppState.setSidebarCollapsed(true);
-            }
-        });
-    }
-    
-    // New chat button
-    if (newChatBtn) {
-        newChatBtn.addEventListener('click', createNewSession);
-    }
-    
-    // Sidebar resize functionality
+
+    // Sidebar resize
     if (sidebarResizeHandle) {
         sidebarResizeHandle.addEventListener('mousedown', startResize);
     }
-    
-    document.addEventListener('mousemove', resize);
-    document.addEventListener('mouseup', stopResize);
-    
-    // Close sidebar when clicking outside on mobile
+
+    // Click outside to close chat (mobile)
     document.addEventListener('click', (e) => {
-        if (window.innerWidth <= 768 && sidebar && sidebarToggle) {
-            if (!sidebar.contains(e.target) && !sidebarToggle.contains(e.target)) {
-                AppState.setSidebarOpen(false);
-            }
-        }
-    });
-    
-    // Close chat when clicking outside (optional)
-    document.addEventListener('click', (e) => {
-        // Don't close chat if modal is open or if clicking on modal elements
-        if (AppState.isModalOpen() || uploadModal?.contains(e.target)) {
-            return;
-        }
-        
         if (AppState.isChatOpen() && chatWidget && !chatWidget.contains(e.target)) {
-            toggleChatWidget();
+            AppState.setChatOpen(false);
         }
     });
-    
-    // Load initial data
+
+    // Window resize handler
+    window.addEventListener('resize', () => {
+        if (window.innerWidth > 768) {
+            // Desktop: reset mobile sidebar state
+            AppState.setSidebarOpen(false);
+        }
+    });
+
+    // Initialize modal
+    initializeModal();
+
+    // Load sessions
     loadSessions();
+
+    // Initialize app state
+    initializeAppState();
 }
 
 // Initialize DOM elements
 function initializeDOMElements() {
-    console.log('Initializing DOM elements...');
-    
-    // Main chat elements
-    chatForm = document.getElementById('chat-form');
-    userInput = document.getElementById('user-input');
-    chatMessages = document.getElementById('chat-messages');
-    searchBtn = document.getElementById('search-btn');
-    
-    // Sidebar elements
-    sidebar = document.getElementById('sidebar');
-    sessionsList = document.getElementById('sessions-list');
-    newChatBtn = document.getElementById('new-chat-btn');
-    sidebarToggle = document.getElementById('sidebar-toggle');
-    sidebarResizeHandle = document.getElementById('sidebar-resize-handle');
-    
-    // Chat widget elements
-    chatWidget = document.getElementById('chat-widget');
-    chatToggleBtn = document.getElementById('chat-toggle-btn');
-    chatInterface = document.getElementById('chat-interface');
-    
-    // Log which elements were found
     const elements = {
         'chat-form': chatForm,
         'user-input': userInput,
         'chat-messages': chatMessages,
-        'search-btn': searchBtn,
         'sidebar': sidebar,
         'sessions-list': sessionsList,
         'new-chat-btn': newChatBtn,
         'sidebar-toggle': sidebarToggle,
+        'mobile-sidebar-toggle': null,
         'sidebar-resize-handle': sidebarResizeHandle,
+        'sidebar-close-btn': sidebarCloseBtn,
+        'search-btn': searchBtn,
         'chat-widget': chatWidget,
         'chat-toggle-btn': chatToggleBtn,
-        'chat-interface': chatInterface
+        'chat-interface': chatInterface,
+        'upload-modal': uploadModal,
+        'metadata-upload-form': metadataUploadForm,
+        'modal-file-input': modalFileInput,
+        'modal-title': modalTitleInput,
+        'modal-category': modalCategorySelect,
+        'modal-location': modalLocationSelect,
+        'modal-tags': modalTagsInput,
+        'modal-questions': modalQuestionsTextarea,
+        'modal-description': modalDescriptionTextarea,
+        'modal-uploaded-by': modalUploadedByInput,
+        'modal-upload-btn': modalUploadBtn,
+        'modal-cancel-btn': modalCancelBtn,
+        'close-upload-modal': closeModalBtn
     };
-    
-    console.log('DOM element initialization results:');
-    Object.entries(elements).forEach(([id, element]) => {
-        if (element) {
-            console.log(`✅ ${id}: Found`);
-        } else {
-            console.error(`❌ ${id}: Not found`);
+
+    // Initialize each element
+    Object.entries(elements).forEach(([id, variable]) => {
+        if (variable === null) {
+            elements[id] = document.getElementById(id);
         }
     });
+
+    // Assign back to variables
+    chatForm = elements['chat-form'];
+    userInput = elements['user-input'];
+    chatMessages = elements['chat-messages'];
+    sidebar = elements['sidebar'];
+    sessionsList = elements['sessions-list'];
+    newChatBtn = elements['new-chat-btn'];
+    sidebarToggle = elements['sidebar-toggle'];
+    mobileSidebarToggle = elements['mobile-sidebar-toggle'];
+    sidebarResizeHandle = elements['sidebar-resize-handle'];
+    sidebarCloseBtn = elements['sidebar-close-btn'];
+    searchBtn = elements['search-btn'];
+    chatWidget = elements['chat-widget'];
+    chatToggleBtn = elements['chat-toggle-btn'];
+    chatInterface = elements['chat-interface'];
+    uploadModal = elements['upload-modal'];
+    metadataUploadForm = elements['metadata-upload-form'];
+    modalFileInput = elements['modal-file-input'];
+    modalTitleInput = elements['modal-title'];
+    modalCategorySelect = elements['modal-category'];
+    modalLocationSelect = elements['modal-location'];
+    modalTagsInput = elements['modal-tags'];
+    modalQuestionsTextarea = elements['modal-questions'];
+    modalDescriptionTextarea = elements['modal-description'];
+    modalUploadedByInput = elements['modal-uploaded-by'];
+    modalUploadBtn = elements['modal-upload-btn'];
+    modalCancelBtn = elements['modal-cancel-btn'];
+    closeModalBtn = elements['close-upload-modal'];
 }
 
 // Handle chat form submission
 function handleChatSubmit(event) {
     event.preventDefault();
-    
-    // Start timing from user click
-    const userClickTime = performance.now();
-    
-    // If we're currently streaming, abort the stream
-    if (AppState.isStreaming() && currentStreamController) {
-        currentStreamController.abort();
-        return;
-    }
-    
+
     const message = userInput.value.trim();
     if (!message) return;
-    
-    // Clear input
-    userInput.value = '';
-    
-    // Log message being sent
-    // console.log(`📤 [FRONTEND TIMING] Sending message: "${message}"`);
-    
-    // Send message with timing context
-    sendMessageStreaming(message, null, userClickTime);
+
+    // Send message with streaming
+    sendMessageStreaming(message);
 }
 
-// Sidebar resize functions
+// Sidebar resize functionality
 function startResize(e) {
-    console.log('startResize called', e);
     if (window.innerWidth <= 768) {
-        console.log('Resize disabled on mobile');
-        return; // Disable on mobile
+        return; // Disable resize on mobile
     }
-    
+
     isResizing = true;
     startX = e.clientX;
-    startWidth = parseInt(getComputedStyle(sidebar).width, 10);
-    
-    console.log('Resize started:', { startX, startWidth });
-    
+    startWidth = sidebar.offsetWidth;
+
+    document.addEventListener('mousemove', resize);
+    document.addEventListener('mouseup', stopResize);
+
     sidebarResizeHandle.classList.add('dragging');
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-    
-    e.preventDefault();
 }
 
 function resize(e) {
     if (!isResizing) return;
-    
-    const width = startWidth + (e.clientX - startX);
-    const minWidth = 200;
-    const maxWidth = 500;
-    
-    console.log('Resizing:', { currentX: e.clientX, newWidth: width });
-    
-    if (width >= minWidth && width <= maxWidth) {
-        sidebar.style.width = width + 'px';
-        sidebar.style.transition = 'none'; // Disable transition during resize
-    }
+
+    const currentX = e.clientX;
+    const width = Math.max(200, Math.min(400, startWidth + (currentX - startX)));
+
+    sidebar.style.width = width + 'px';
 }
 
 function stopResize() {
-    if (!isResizing) return;
-    
-    console.log('Resize stopped');
     isResizing = false;
+    document.removeEventListener('mousemove', resize);
+    document.removeEventListener('mouseup', stopResize);
+
     sidebarResizeHandle.classList.remove('dragging');
-    document.body.style.cursor = '';
-    document.body.style.userSelect = '';
-    sidebar.style.transition = 'all 0.3s ease'; // Re-enable transition
-    
-    // If sidebar should be collapsed, clear the width to allow CSS to take effect
-    if (AppState.ui.sidebarCollapsed && window.innerWidth > 768) {
-        sidebar.style.width = '';
-    }
 }
 
-// Chat widget toggle function
+// Toggle chat widget
 function toggleChatWidget() {
     AppState.setChatOpen(!AppState.isChatOpen());
 }
 
-// Initialize modal elements
+// Initialize modal functionality
 function initializeModal() {
-    uploadModal = document.getElementById('upload-modal');
-    metadataUploadForm = document.getElementById('metadata-upload-form');
-    modalFileInput = document.getElementById('modal-file-input');
-    modalTitleInput = document.getElementById('modal-title');
-    modalCategorySelect = document.getElementById('modal-category');
-    modalLocationSelect = document.getElementById('modal-location');
-    modalTagsInput = document.getElementById('modal-tags');
-    modalQuestionsTextarea = document.getElementById('modal-questions');
-    modalDescriptionTextarea = document.getElementById('modal-description');
-    modalUploadedByInput = document.getElementById('modal-uploaded-by');
-    modalUploadBtn = document.getElementById('modal-upload-btn');
-    modalCancelBtn = document.getElementById('modal-cancel-btn');
-    closeModalBtn = document.getElementById('close-upload-modal');
+    if (metadataUploadForm) {
+        metadataUploadForm.addEventListener('submit', handleMetadataUpload);
+    }
 
-    // Set up event listeners
-    modalFileInput.addEventListener('change', handleFileSelection);
-    metadataUploadForm.addEventListener('submit', handleMetadataUpload);
-    modalCancelBtn.addEventListener('click', closeModal);
-    closeModalBtn.addEventListener('click', closeModal);
-    
-    // Close modal when clicking outside
-    uploadModal.addEventListener('click', (e) => {
-        if (e.target === uploadModal) {
-            closeModal();
-        }
-    });
+    if (modalCancelBtn) {
+        modalCancelBtn.addEventListener('click', closeModal);
+    }
+
+    if (closeModalBtn) {
+        closeModalBtn.addEventListener('click', closeModal);
+    }
+
+    if (modalFileInput) {
+        modalFileInput.addEventListener('change', handleFileSelection);
+    }
 
     // Populate dropdowns
     populateDropdowns();
 }
 
-// Populate category and location dropdowns
+// Populate dropdown options
 async function populateDropdowns() {
     try {
-        // Get categories
+        // Fetch categories
         const categoriesResponse = await fetch('/api/categories');
         if (categoriesResponse.ok) {
             const categoriesData = await categoriesResponse.json();
-            populateSelect(modalCategorySelect, categoriesData.categories, 'Select Category');
+            if (modalCategorySelect) {
+                populateSelect(modalCategorySelect, categoriesData.categories, 'Select Category');
+            }
         }
 
-        // Get locations
+        // Fetch locations
         const locationsResponse = await fetch('/api/locations');
         if (locationsResponse.ok) {
             const locationsData = await locationsResponse.json();
-            populateSelect(modalLocationSelect, locationsData.locations, 'Select Location');
+            if (modalLocationSelect) {
+                populateSelect(modalLocationSelect, locationsData.locations, 'Select Location');
+            }
         }
     } catch (error) {
-        console.error('Error populating dropdowns:', error);
-        // Add default options if API fails - matching backend options
-        populateSelect(modalCategorySelect, [
-            'Human Resources',
-            'Finance & Accounting', 
-            'Information Technology',
-            'Legal & Compliance',
-            'Operations & Management'
-        ], 'Select Category');
-        populateSelect(modalLocationSelect, [
-            'All Locations',
-            'Headquarters',
-            'Branch Office - North',
-            'Branch Office - South', 
-            'Remote/Home Office'
-        ], 'Select Location');
+        console.error('Failed to load dropdown options:', error);
     }
 }
 
-// Helper function to populate select elements
+// Populate select element with options
 function populateSelect(selectElement, options, placeholder) {
     selectElement.innerHTML = '';
-    
+
     // Add placeholder option
     const placeholderOption = document.createElement('option');
     placeholderOption.value = '';
@@ -1358,7 +1136,7 @@ function populateSelect(selectElement, options, placeholder) {
     placeholderOption.disabled = true;
     placeholderOption.selected = true;
     selectElement.appendChild(placeholderOption);
-    
+
     // Add options
     options.forEach(option => {
         const optionElement = document.createElement('option');
@@ -1368,28 +1146,24 @@ function populateSelect(selectElement, options, placeholder) {
     });
 }
 
-// Handle file selection in modal
+// Handle file selection
 function handleFileSelection(event) {
     const file = event.target.files[0];
     if (file) {
-        // Auto-fill title with filename (without extension)
-        const fileName = file.name.replace(/\.[^/.]+$/, "");
-        modalTitleInput.value = fileName;
-        
-        // Auto-fill uploaded by if available
-        if (!modalUploadedByInput.value) {
-            // You could get this from user session or localStorage
-            modalUploadedByInput.value = 'user@company.com';
+        // Auto-populate title from filename
+        const title = file.name.replace(/\.[^/.]+$/, ""); // Remove extension
+        if (modalTitleInput) {
+            modalTitleInput.value = title;
         }
     }
 }
 
-// Show the upload modal
+// Show upload modal
 function showUploadModal() {
     AppState.setModalOpen(true, 'upload');
 }
 
-// Make it globally accessible
+// Make showUploadModal available globally
 window.showUploadModal = showUploadModal;
 
 // Close the upload modal
@@ -1401,7 +1175,7 @@ function closeModal() {
 // Handle metadata upload form submission
 async function handleMetadataUpload(event) {
     event.preventDefault();
-    
+
     const file = modalFileInput.files[0];
     if (!file) {
         alert('Please select a file to upload.');
@@ -1457,11 +1231,10 @@ async function handleMetadataUpload(event) {
 
         if (response.ok) {
             const result = await response.json();
-            console.log('Upload successful:', result);
-            
+
             // Show success message
             addMessage(`<img src="/static/icons/upload-success.svg" alt="Success" class="message-icon" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 8px;"> Successfully uploaded "${result.metadata.title}" with metadata. The document is now available for questions.`, 'system');
-            
+
             // Close modal
             closeModal();
         } else {
@@ -1487,31 +1260,31 @@ async function handleSearchClick() {
         alert('Please enter a search query first.');
         return;
     }
-    
+
     // Clear input
     userInput.value = '';
-    
+
     // Add user message
     addMessage(message, 'user');
-    
+
     // Show typing indicator
     showTypingIndicator();
-    
+
     try {
         // Perform hybrid search
         const searchResults = await performHybridSearch(message);
-        
+
         // Remove typing indicator
         removeTypingIndicator();
-        
+
         // Add search results as system message
         if (searchResults.summary) {
             addMessage(searchResults.summary, 'system', true);
         }
-        
+
         // Generate AI response based on search results
         await generateResponseFromSearch(message, searchResults);
-        
+
     } catch (error) {
         console.error('Search failed:', error);
         removeTypingIndicator();
@@ -1533,13 +1306,13 @@ async function performHybridSearch(query) {
                 include_internet: true
             })
         });
-        
+
         if (!response.ok) {
             throw new Error(`Search failed: ${response.statusText}`);
         }
-        
+
         return await response.json();
-        
+
     } catch (error) {
         console.error('Hybrid search error:', error);
         throw error;
@@ -1550,7 +1323,7 @@ async function generateResponseFromSearch(userQuery, searchResults) {
     try {
         // Create context from search results
         let context = "Based on my search results:\n\n";
-        
+
         // Add local results
         if (searchResults.local_results && searchResults.local_results.documents) {
             context += "**Local Documents:**\n";
@@ -1558,7 +1331,7 @@ async function generateResponseFromSearch(userQuery, searchResults) {
                 context += `${index + 1}. ${doc.substring(0, 200)}...\n\n`;
             });
         }
-        
+
         // Add web results
         if (searchResults.web_results && searchResults.web_results.length > 0) {
             context += "**Web Results:**\n";
@@ -1568,12 +1341,12 @@ async function generateResponseFromSearch(userQuery, searchResults) {
                 context += `   Source: ${result.url}\n\n`;
             });
         }
-        
+
         // Add search summary
         if (searchResults.summary) {
             context += `**Search Summary:**\n${searchResults.summary}\n\n`;
         }
-        
+
         // Generate AI response using the search context
         const systemInstruction = `You are a helpful AI assistant. Use the following search results to answer the user's question. Provide a comprehensive response that combines information from both local documents and web search results. Always cite your sources when possible.
 
@@ -1584,9 +1357,12 @@ Please respond to the user's question: "${userQuery}"`;
         // Use the existing streaming response function with the search context
         // Note: This is called from search, so we don't have the original user click time
         await sendMessageStreaming(userQuery, systemInstruction);
-        
+
     } catch (error) {
         console.error('Error generating response from search:', error);
         addMessage('I found some information but had trouble generating a response. Here are the search results above.', 'system');
     }
-} 
+}
+
+// Initialize when DOM is ready
+document.addEventListener('DOMContentLoaded', setupEventListeners); 

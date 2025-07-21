@@ -311,6 +311,11 @@ def get_product_reviews(product_id: int):
     return ecommerce_service.get_product_reviews(product_id)
 
 # Product inventory endpoints
+@router.get("/inventory", response_model=List[InventoryResponse])
+def list_all_inventory():
+    """Get all inventory items"""
+    return ecommerce_service.get_all_inventory()
+
 @router.get("/products/{product_id}/inventory", response_model=InventoryResponse)
 def get_product_inventory(product_id: int):
     """Get inventory for a specific product"""

@@ -40,5 +40,11 @@ def get_db():
 
 # Initialize database tables
 def init_db():
+    # Import all SQLAlchemy models to ensure they're registered with Base
     from backend.models.chat import ChatSession, ChatMessage
+    from backend.models.ecommerce import (
+        Customer, Address, Category, Supplier, Product, ProductImage, 
+        Inventory, Order, OrderItem, Payment, Shipping, Cart, CartItem, 
+        Discount, Review, Wishlist, WishlistItem
+    )
     Base.metadata.create_all(bind=engine)

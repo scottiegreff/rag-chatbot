@@ -173,7 +173,7 @@ curl -X POST http://localhost:8010/api/chat \
 ```bash
 # Production security
 DEBUG=false
-ENABLE_INTERNET_SEARCH=false
+ENABLE_INTERNET_SEARCH=true
 CORS_ORIGINS=https://yourdomain.com
 ```
 

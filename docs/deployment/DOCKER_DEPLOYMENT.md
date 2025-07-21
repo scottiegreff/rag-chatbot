@@ -312,7 +312,7 @@ CPU_LIMIT=2.0
 POSTGRES_PASSWORD=password1234
 
 # Disable internet search in production
-ENABLE_INTERNET_SEARCH=false
+ENABLE_INTERNET_SEARCH=true
 
 # Restrict CORS origins
 CORS_ORIGINS=https://yourdomain.com

@@ -13,7 +13,6 @@ from dotenv import load_dotenv
 from datetime import datetime
 import time
 from .search_service import SearchService
-# from backend.services.database_query_service import db_query_service  # Backup - commented out
 from backend.services.langchain_sql_service import langchain_sql_service
 from weaviate.connect import ConnectionParams
 from weaviate.collections.classes.config import DataType, Property, Vectorizers, Configure
@@ -78,7 +77,6 @@ class RAGService:
             return
         
         self._initialized = True
-        init_start_time = datetime.utcnow()
         
         # Initialize Weaviate client lazily (will connect when first used)
         self.client = None
@@ -86,7 +84,6 @@ class RAGService:
         
         # Load the embedding model
         logger.info(f"🔄 Loading embedding model: {EMBEDDING_MODEL}...")
-        embedding_start_time = datetime.utcnow()
         # Use CPU by default to avoid GPU/Metal contention with LLM
         device = 'cpu' if RAG_USE_CPU else 'auto'
         if SENTENCE_TRANSFORMERS_AVAILABLE:
@@ -96,13 +93,7 @@ class RAGService:
         else:
             self.embedding_model = None
             logger.warning("⚠️  sentence-transformers not available, embedding functionality disabled")
-        embedding_end_time = datetime.utcnow()
-        embedding_duration = (embedding_end_time - embedding_start_time).total_seconds()
-        logger.info(f"✅ Embedding model loaded in {embedding_duration:.2f} seconds ({device} mode)")
-        
-        init_end_time = datetime.utcnow()
-        init_duration = (init_end_time - init_start_time).total_seconds()
-        logger.info(f"🎉 RAG service initialized in {init_duration:.2f} seconds")
+        logger.info(f"✅ Embedding model loaded ({device} mode)")
         logger.info(f"📊 Chunking parameters: chunk_size={DEFAULT_CHUNK_SIZE}, overlap={DEFAULT_OVERLAP}")
         
         # Initialize search service if internet search is enabled
@@ -296,13 +287,8 @@ class RAGService:
             # Ensure Weaviate is connected
             self._ensure_weaviate_connected()
             
-            embedding_start_time = datetime.utcnow()
             query_embedding = self.embedding_model.encode(query).tolist() if self.embedding_model else None
-            embedding_end_time = datetime.utcnow()
-            embedding_duration = (embedding_end_time - embedding_start_time).total_seconds() * 1000
-            logger.info(f"🔤 Query embedding generated in {embedding_duration:.2f}ms")
 
-            search_start_time = datetime.utcnow()
             collection = self.client.collections.get(COLLECTION_NAME)
             
             if metadata_filter:
@@ -324,96 +310,11 @@ class RAGService:
                     limit=n_results
                 )
                 
-            search_end_time = datetime.utcnow()
-            search_duration = (search_end_time - search_start_time).total_seconds() * 1000
-            logger.info(f"🔎 Vector search completed in {search_duration:.2f}ms")
-            
             # Weaviate v4 returns a list of GenerativeObject directly
             return results
         except Exception as e:
             logger.error(f"Error querying documents: {e}")
             raise
-
-    def query_by_location(self, query, location, n_results=5):
-        """Query documents filtered by location."""
-        try:
-            collection = self.client.collections.get(COLLECTION_NAME)
-            filters = Filter.by_property("location").equal(location)
-            results = collection.query.fetch_objects(filters=filters, limit=n_results)
-            return results
-        except Exception as e:
-            logger.error(f"Error querying by location: {e}")
-            raise
-    
-    def query_by_category(self, query, category, n_results=5):
-        """Query documents filtered by category."""
-        try:
-            collection = self.client.collections.get(COLLECTION_NAME)
-            filters = Filter.by_property("category").equal(category)
-            results = collection.query.fetch_objects(filters=filters, limit=n_results)
-            return results
-        except Exception as e:
-            logger.error(f"Error querying by category: {e}")
-            raise
-
-    def query_by_questions(self, query, n_results=5):
-        """
-        Query documents that are likely to answer the given question.
-        This uses semantic similarity to match against the general_questions field.
-        """
-        # For now, we'll do a regular query and then filter by question relevance
-        # In the future, this could be enhanced with more sophisticated question matching
-        results = self.query_documents(query, n_results=n_results * 2)  # Get more results to filter
-        
-        # Filter results based on question relevance (simplified approach)
-        # In a production system, you might want to use a more sophisticated approach
-        filtered_results = {
-            'ids': [],
-            'documents': [],
-            'metadatas': [],
-            'distances': []
-        }
-        
-        for i, metadata_list in enumerate(results['metadatas']):
-            for j, metadata in enumerate(metadata_list):
-                if 'general_questions' in metadata:
-                    questions = metadata['general_questions']
-                    # Simple keyword matching - could be enhanced with semantic similarity
-                    query_lower = query.lower()
-                    if any(keyword in query_lower for keyword in ['how', 'what', 'where', 'when', 'why', 'who']):
-                        # Add to filtered results
-                        for key in filtered_results:
-                            if key in results and len(results[key]) > i and len(results[key][i]) > j:
-                                if key not in filtered_results:
-                                    filtered_results[key] = []
-                                filtered_results[key].append(results[key][i][j])
-        
-        return filtered_results
-
-    def get_document_metadata(self, document_id):
-        """Get metadata for a specific document."""
-        try:
-            collection = self.client.collections.get(COLLECTION_NAME)
-            where_filter = {
-                "path": ["document_id"],
-                "operator": "Equal",
-                "valueText": document_id
-            }
-            response = collection.query.where(where_filter).fetch_objects(limit=1)
-            if response.objects:
-                obj = response.objects[0]
-                return {
-                    'document_id': obj.properties.get('document_id', ''),
-                    'chunk_index': obj.properties.get('chunk_index', 0),
-                    'category': obj.properties.get('category', ''),
-                    'location': obj.properties.get('location', ''),
-                    'source': obj.properties.get('source', ''),
-                    'upload_date': obj.properties.get('upload_date', '')
-                }
-            return None
-        except Exception as e:
-            logger.error(f"Error getting document metadata: {e}")
-            return None
 
     def list_documents_by_category(self, category=None):
         """List all documents, optionally filtered by category."""
@@ -469,12 +370,19 @@ class RAGService:
             'summary': ''
         }
         
-        # Get local RAG results
+                    # Get local RAG results
         try:
             logger.info(f"🔍 Performing local RAG search for: {query}")
             local_results = self.query_documents(query, n_results=n_local_results)
             results['local_results'] = local_results
-            logger.info(f"✅ Found {len(local_results) if isinstance(local_results, list) else 0} local results")
+            # Handle Weaviate v4 GenerativeReturn object
+            if hasattr(local_results, 'objects'):
+                result_count = len(local_results.objects) if local_results.objects else 0
+            elif isinstance(local_results, list):
+                result_count = len(local_results)
+            else:
+                result_count = 0
+            logger.info(f"✅ Found {result_count} local results")
         except Exception as e:
             logger.error(f"❌ Local RAG search failed: {e}")
             results['local_results'] = {'documents': [], 'metadatas': [], 'ids': []}
@@ -483,7 +391,9 @@ class RAGService:
         if include_internet and self.search_service:
             try:
                 logger.info(f"🌐 Performing internet search for: {query}")
-                web_results = self.search_service.search(query, num_results=n_web_results)
+                # Use the configured search engine from environment
+                search_engine = os.getenv('SEARCH_ENGINE', 'duckduckgo')
+                web_results = self.search_service.search(query, num_results=n_web_results, engine=search_engine)
                 results['web_results'] = web_results
                 logger.info(f"✅ Found {len(web_results)} web results")
                 
@@ -499,78 +409,34 @@ class RAGService:
                 results['summary'] = f"Internet search is currently unavailable. Here's what I found in your documents:"
         
         return results
-    
-    def search_internet_only(self, query: str, num_results: int = 5) -> Dict:
-        """
-        Perform internet search only (without local RAG).
-        
-        Args:
-            query: The search query
-            num_results: Number of results to return
-            
-        Returns:
-            Dict containing web search results and summary
-        """
-        if not self.search_service:
-            return {
-                'web_results': [],
-                'summary': 'Internet search is not available.'
-            }
-        
-        try:
-            logger.info(f"🌐 Performing internet-only search for: {query}")
-            web_results = self.search_service.search(query, num_results=num_results)
-            
-            summary = ""
-            if web_results:
-                summary = self.search_service.get_search_summary(query, web_results)
-            else:
-                summary = f"I couldn't find any recent information about '{query}'."
-            
-            return {
-                'web_results': web_results,
-                'summary': summary
-            }
-            
-        except Exception as e:
-            logger.error(f"❌ Internet search failed: {e}")
-            return {
-                'web_results': [],
-                'summary': f"Internet search failed: {str(e)}"
-            } 
 
     def get_context_for_query(self, query: str) -> str:
         """
         Get relevant context for a query by combining local RAG and internet search.
-        
-        Args:
-            query: The search query
-            
-        Returns:
-            Formatted context string combining local and web results
         """
-        context_start_time = time.time()
-        logger.info(f"🔍 [TIMING] Starting context retrieval for query: '{query[:50]}...'")
-        
         try:
             # Get hybrid search results
-            hybrid_start_time = time.time()
             hybrid_results = self.hybrid_search(query, n_local_results=3, n_web_results=2)
-            hybrid_end_time = time.time()
-            hybrid_duration = (hybrid_end_time - hybrid_start_time) * 1000
-            logger.info(f"🔍 [TIMING] Hybrid search completed in {hybrid_duration:.2f}ms")
-            
             context_parts = []
             
             # Add local document context
             local_results = hybrid_results.get('local_results')
-            if local_results and isinstance(local_results, list) and len(local_results) > 0:
+            if hasattr(local_results, 'objects') and local_results.objects:
+                context_parts.append("📄 Relevant Documents:")
+                for i, obj in enumerate(local_results.objects, 1):
+                    content = obj.properties.get('content', '') if hasattr(obj, 'properties') else ''
+                    source = obj.properties.get('source', 'Unknown') if hasattr(obj, 'properties') else 'Unknown'
+                    source_info = f" (Source: {source})" if source != 'Unknown' else ""
+                    context_parts.append(f"{i}. {content[:200]}...{source_info}")
+            elif isinstance(local_results, list) and len(local_results) > 0:
                 context_parts.append("📄 Relevant Documents:")
                 for i, obj in enumerate(local_results, 1):
                     content = obj.properties.get('content', '') if hasattr(obj, 'properties') else ''
                     source = obj.properties.get('source', 'Unknown') if hasattr(obj, 'properties') else 'Unknown'
                     source_info = f" (Source: {source})" if source != 'Unknown' else ""
                     context_parts.append(f"{i}. {content[:200]}...{source_info}")
+            else:
+                context_parts.append("No relevant local documents found.")
             
             # Add internet search context
             web_results = hybrid_results.get('web_results', [])
@@ -586,16 +452,9 @@ class RAGService:
             if summary:
                 context_parts.append(f"\n📝 Summary: {summary}")
             
-            context_end_time = time.time()
-            context_duration = (context_end_time - context_start_time) * 1000
-            logger.info(f"🔍 [TIMING] Context retrieval completed in {context_duration:.2f}ms")
-            
             return "\n".join(context_parts) if context_parts else "No relevant context found."
-            
         except Exception as e:
-            context_end_time = time.time()
-            context_duration = (context_end_time - context_start_time) * 1000
-            logger.error(f"❌ [TIMING] Context retrieval failed after {context_duration:.2f}ms: {e}")
+            logger.error(f"❌ Context retrieval failed: {e}")
             return f"Error retrieving context: {str(e)}"
 
     def process_database_query(self, query: str) -> Dict[str, Any]:
@@ -609,34 +468,16 @@ class RAGService:
         Returns:
             Dict containing processed results and context
         """
-        db_process_start_time = time.time()
-        logger.info(f"🗄️ [TIMING] Starting database query processing for: '{query[:50]}...'")
-        
         try:
             # First, try to get relevant context from documents
-            context_start_time = time.time()
             context = self.get_context_for_query(query)
-            context_end_time = time.time()
-            context_duration = (context_end_time - context_start_time) * 1000
-            logger.info(f"📄 [TIMING] Document context retrieval completed in {context_duration:.2f}ms")
             
             # Then, try to get any database-specific information
-            db_query_start_time = time.time()
             db_results = None
             try:
-                # db_results = db_query_service.process_query(query)  # Backup - commented out
                 db_results = langchain_sql_service.process_query(query)
-                db_query_end_time = time.time()
-                db_query_duration = (db_query_end_time - db_query_start_time) * 1000
-                logger.info(f"🗄️ [TIMING] Database query completed in {db_query_duration:.2f}ms")
             except Exception as e:
-                db_query_end_time = time.time()
-                db_query_duration = (db_query_end_time - db_query_start_time) * 1000
-                logger.warning(f"❌ [TIMING] Database query failed after {db_query_duration:.2f}ms: {e}")
-            
-            db_process_end_time = time.time()
-            db_process_duration = (db_process_end_time - db_process_start_time) * 1000
-            logger.info(f"🗄️ [TIMING] Database query processing completed in {db_process_duration:.2f}ms")
+                logger.warning(f"❌ Database query failed: {e}")
             
             return {
                 'query': query,
@@ -647,9 +488,7 @@ class RAGService:
             }
             
         except Exception as e:
-            db_process_end_time = time.time()
-            db_process_duration = (db_process_end_time - db_process_start_time) * 1000
-            logger.error(f"❌ [TIMING] Database query processing failed after {db_process_duration:.2f}ms: {e}")
+            logger.error(f"❌ Database query processing failed: {e}")
             return {
                 'query': query,
                 'context': f"Error processing query: {str(e)}",

@@ -29,7 +29,7 @@
                 <div class="sidebar" id="sidebar">
                     <div class="sidebar-header">
                         <button id="sidebar-close-btn" class="sidebar-close-btn" title="Close Sidebar">
-                            <img src="/static/icons/close.svg" alt="Close" class="sidebar-close-icon" />
+                            <img src="/static/icons/close.svg?v=1" alt="Close" class="sidebar-close-icon" />
                         </button>
                         <button id="new-chat-btn" class="new-chat-btn">+ New Chat</button>
                     </div>
@@ -45,11 +45,14 @@
                         <button id="sidebar-toggle" class="sidebar-toggle" title="Open Sidebar">
                             <img src="/static/icons/chat.svg" alt="Open Sidebar" class="sidebar-toggle-icon" />
                         </button>
+                        <button id="mobile-sidebar-toggle" class="mobile-sidebar-toggle" title="Open Sidebar">
+                            <img src="/static/icons/chat.svg" alt="Open Sidebar" class="sidebar-toggle-icon" />
+                        </button>
                         <h1>FCI Chatbot</h1>
                     </div>
                     <div class="chat-messages" id="chat-messages">
                         <div class="message system">
-                            Welcome to AI Chatbot! How can I help you today?
+                            Welcome to FCIAS Chatbot! How can I help you today?
                         </div>
                     </div>
                     <div class="chat-input">
@@ -119,6 +122,7 @@
     </div>
     <!-- End Metadata Upload Modal -->
 
+    <script src="js/url-validator.js"></script>
     <script src="js/chat.js?v=2.0&t=1703123456789"></script>
 </body>
 

@@ -6,7 +6,6 @@ from dotenv import load_dotenv
 from datetime import datetime
 import time
 import threading
-import multiprocessing
 
 # Load environment variables
 load_dotenv()
@@ -19,16 +18,6 @@ _llm_service_instance = None
 
 class LLMService:
     """Service for interacting with the LLM model using ctransformers"""
-    
-    @classmethod
-    def reset_instance(cls):
-        """Reset the singleton instance to force fresh initialization"""
-        global _llm_service_instance
-        if _llm_service_instance and hasattr(_llm_service_instance, 'model'):
-            logger.info("🔄 Resetting LLMService singleton instance")
-            _llm_service_instance.model = None
-        _llm_service_instance = None
-        logger.info("✅ LLMService singleton instance reset")
     
     def __new__(cls):
         global _llm_service_instance
@@ -117,25 +106,14 @@ class LLMService:
     
     def _prepare_prompt(self, message: str, history: Optional[List[Dict[str, str]]] = None, system_instruction: Optional[str] = None) -> str:
         """Prepare the prompt for the model with conversation history and system instruction"""
-        prompt_start_time = time.time()
-        
         # Check if Chain of Thought reasoning should be used
-        cot_check_start_time = time.time()
         use_cot = self._should_use_chain_of_thought(message)
-        cot_check_end_time = time.time()
-        cot_check_duration = (cot_check_end_time - cot_check_start_time) * 1000
-        logger.info(f"🧠 [TIMING] Chain of Thought check completed in {cot_check_duration:.2f}ms")
         
         if use_cot:
             logger.info("🧠 Chain of Thought reasoning detected - enhancing prompt")
-            cot_enhance_start_time = time.time()
             message = self._add_chain_of_thought_prompt(message)
-            cot_enhance_end_time = time.time()
-            cot_enhance_duration = (cot_enhance_end_time - cot_enhance_start_time) * 1000
-            logger.info(f"🧠 [TIMING] Chain of Thought enhancement completed in {cot_enhance_duration:.2f}ms")
         
         # For Mistral 7B Instruct, use the [INST] format
-        format_start_time = time.time()
         if self.model_path and "mistral" in str(self.model_path).lower():
             # Mistral 7B Instruct format
             if system_instruction:
@@ -150,14 +128,6 @@ class LLMService:
                 prompt = ""
             prompt += f"User: {message}\nAssistant:"
         
-        format_end_time = time.time()
-        format_duration = (format_end_time - format_start_time) * 1000
-        logger.info(f"📝 [TIMING] Prompt formatting completed in {format_duration:.2f}ms")
-        
-        prompt_end_time = time.time()
-        prompt_duration = (prompt_end_time - prompt_start_time) * 1000
-        logger.info(f"📝 [TIMING] Total prompt preparation completed in {prompt_duration:.2f}ms")
-        
         return prompt
 
     async def generate_streaming_response(
@@ -167,33 +137,15 @@ class LLMService:
         system_instruction: Optional[str] = None
     ) -> AsyncGenerator[str, None]:
         """Generate a streaming response from the model"""
-        generation_start_time = time.time()
-        logger.info(f"🤖 [TIMING] Starting streaming response generation (thread={threading.current_thread().name}, pid={os.getpid()})")
-        logger.info(f"[ENV] CT_METAL={os.getenv('CT_METAL')}, CT_CUDA={os.getenv('CT_CUDA')}, GPU_LAYERS={os.getenv('GPU_LAYERS')}")
-        
         try:
             if not self.model:
                 raise RuntimeError("Model not loaded. Please load the model first.")
             
-            # Time prompt preparation
-            prompt_start_time = time.time()
             prompt = self._prepare_prompt(message, history, system_instruction)
-            prompt_end_time = time.time()
-            prompt_duration = (prompt_end_time - prompt_start_time) * 1000
-            logger.info(f"📄 [TIMING] Prompt preparation completed in {prompt_duration:.2f}ms (thread={threading.current_thread().name}, pid={os.getpid()})")
             logger.info(f"📄 Prompt length: {len(prompt)} characters")
-            logger.info(f"📄 Prompt being sent to model:\n{prompt}")
-            logger.info("Generating streaming response...")
-            
-            # Time token generation
-            token_gen_start_time = time.time()
-            token_count = 0
-            first_token_time = None
-            logger.info(f"[TIMING] Model call about to start (thread={threading.current_thread().name}, pid={os.getpid()})")
             
             # Generate response with error handling
             try:
-                model_call_start_time = time.time()
                 response = self.model.create_completion(
                     prompt,
                     max_tokens=self.max_new_tokens,
@@ -203,55 +155,29 @@ class LLMService:
                     stop=["[INST]", "</s>", "<|endoftext|>", "User:", "Assistant:", "\n\nUser:", "\n\nAssistant:"],
                     stream=True
                 )
-                model_call_end_time = time.time()
-                model_call_duration = (model_call_end_time - model_call_start_time) * 1000
-                logger.info(f"🤖 [TIMING] Model call returned response generator in {model_call_duration:.2f}ms (thread={threading.current_thread().name}, pid={os.getpid()})")
                 
+                token_count = 0
                 for chunk in response:
-                    chunk_time = time.time()
                     if isinstance(chunk, dict) and 'choices' in chunk and chunk['choices']:
                         token = chunk['choices'][0]['text']
                         if token:
-                            if first_token_time is None:
-                                first_token_time = chunk_time
-                                first_token_duration = (first_token_time - token_gen_start_time) * 1000
-                                logger.info(f"🎯 [TIMING] First token received in {first_token_duration:.2f}ms (thread={threading.current_thread().name}, pid={os.getpid()})")
                             token_count += 1
-                            logger.debug(f"[TOKEN] {token_count}: {token[:30]}...")
                             yield token
                     elif chunk and hasattr(chunk, 'choices') and chunk.choices:
                         token = chunk.choices[0].text
                         if token:
-                            if first_token_time is None:
-                                first_token_time = chunk_time
-                                first_token_duration = (first_token_time - token_gen_start_time) * 1000
-                                logger.info(f"🎯 [TIMING] First token received in {first_token_duration:.2f}ms (thread={threading.current_thread().name}, pid={os.getpid()})")
                             token_count += 1
-                            logger.debug(f"[TOKEN] {token_count}: {token[:30]}...")
                             yield token
                 
-                token_gen_end_time = time.time()
-                token_gen_duration = (token_gen_end_time - token_gen_start_time) * 1000
-                tokens_per_second = token_count / (token_gen_duration / 1000) if token_gen_duration > 0 else 0
-                
-                logger.info(f"🤖 [TIMING] Token generation completed in {token_gen_duration:.2f}ms (thread={threading.current_thread().name}, pid={os.getpid()})")
-                logger.info(f"📊 Generated {token_count} tokens at {tokens_per_second:.2f} tokens/second")
-                
-                generation_end_time = time.time()
-                total_generation_duration = (generation_end_time - generation_start_time) * 1000
-                logger.info(f"🤖 [TIMING] Total streaming response generation completed in {total_generation_duration:.2f}ms (thread={threading.current_thread().name}, pid={os.getpid()})")
+                logger.info(f"📊 Generated {token_count} tokens")
                 
             except Exception as e:
-                error_end_time = time.time()
-                error_duration = (error_end_time - generation_start_time) * 1000
-                logger.error(f"❌ [TIMING] Model generation failed after {error_duration:.2f}ms: {str(e)}", exc_info=True)
+                logger.error(f"❌ Model generation failed: {str(e)}", exc_info=True)
                 yield f"\n\nError: {str(e)}"
                 return
             
         except Exception as e:
-            error_end_time = time.time()
-            error_duration = (error_end_time - generation_start_time) * 1000
-            logger.error(f"❌ [TIMING] Streaming response generation failed after {error_duration:.2f}ms: {str(e)}", exc_info=True)
+            logger.error(f"❌ Streaming response generation failed: {str(e)}", exc_info=True)
             yield f"\n\nError: {str(e)}"
             return
 
@@ -265,27 +191,12 @@ class LLMService:
         try:
             if not self.model:
                 raise RuntimeError("Model not loaded. Please load the model first.")
-            logger.info(f"🤖 [TIMING] Starting non-streaming response generation (thread={threading.current_thread().name}, pid={os.getpid()})")
-            logger.info(f"[ENV] CT_METAL={os.getenv('CT_METAL')}, CT_CUDA={os.getenv('CT_CUDA')}, GPU_LAYERS={os.getenv('GPU_LAYERS')}")
             
-            # Time prompt preparation
-            prompt_start_time = datetime.utcnow()
             prompt = self._prepare_prompt(message, history, system_instruction)
-            prompt_end_time = datetime.utcnow()
-            prompt_duration = (prompt_end_time - prompt_start_time).total_seconds() * 1000
-            logger.info(f"📝 Prompt preparation completed in {prompt_duration:.2f}ms (thread={threading.current_thread().name}, pid={os.getpid()})")
             logger.info(f"📄 Prompt length: {len(prompt)} characters")
-            
-            logger.info(f"📄 Prompt being sent to model:\n{prompt}")
-            logger.info("Generating response...")
-            
-            # Time token generation
-            generation_start_time = datetime.utcnow()
             
             # Generate response with error handling
             try:
-                logger.info(f"[TIMING] Model call about to start (thread={threading.current_thread().name}, pid={os.getpid()})")
-                model_call_start_time = datetime.utcnow()
                 response = self.model.create_completion(
                     prompt,
                     max_tokens=self.max_new_tokens,
@@ -294,67 +205,19 @@ class LLMService:
                     repeat_penalty=self.repetition_penalty,
                     stop=["[INST]", "</s>", "<|endoftext|>", "User:", "Assistant:", "\n\nUser:", "\n\nAssistant:"]
                 )
-                model_call_end_time = datetime.utcnow()
-                model_call_duration = (model_call_end_time - model_call_start_time).total_seconds() * 1000
-                logger.info(f"🤖 [TIMING] Model call returned in {model_call_duration:.2f}ms (thread={threading.current_thread().name}, pid={os.getpid()})")
                 
                 # Extract the response text from the completion object
-                extract_start_time = datetime.utcnow()
-                logger.info(f"🔍 Response object type: {type(response)}")
-                logger.info(f"🔍 Response object: {str(response)[:200]}...")
                 if isinstance(response, dict) and 'choices' in response and response['choices']:
                     response_text = response['choices'][0]['text']
-                    logger.info(f"🔍 Extracted text from choices: {response_text[:100]}...")
                 elif hasattr(response, 'choices') and response.choices:
                     response_text = response.choices[0].text
-                    logger.info(f"🔍 Extracted text from choices: {response_text[:100]}...")
                 else:
                     response_text = str(response) if response else ""
-                    logger.info(f"🔍 Using string representation: {response_text[:100]}...")
-                extract_end_time = datetime.utcnow()
-                extract_duration = (extract_end_time - extract_start_time).total_seconds() * 1000
-                logger.info(f"🔍 [TIMING] Response extraction completed in {extract_duration:.2f}ms (thread={threading.current_thread().name}, pid={os.getpid()})")
                 
                 # Clean up the response - remove any unwanted text that might have been generated
-                if "Implementing this functionality" in response_text:
-                    response_text = response_text.split("Implementing this functionality")[0].strip()
-                if "This functionality" in response_text and "Implementing" not in response_text:
-                    response_text = response_text.split("This functionality")[0].strip()
-                if "This will help" in response_text:
-                    response_text = response_text.split("This will help")[0].strip()
-                if "This improves" in response_text:
-                    response_text = response_text.split("This improves")[0].strip()
+                response_text = self._clean_response(response_text)
                 
-                # Clean up fake conversations - remove any text that looks like the model is pretending to be a user
-                if "User:" in response_text:
-                    response_text = response_text.split("User:")[0].strip()
-                if "User: Do you" in response_text:
-                    response_text = response_text.split("User: Do you")[0].strip()
-                if "User: Can you" in response_text:
-                    response_text = response_text.split("User: Can you")[0].strip()
-                if "User: What" in response_text:
-                    response_text = response_text.split("User: What")[0].strip()
-                if "User: How" in response_text:
-                    response_text = response_text.split("User: How")[0].strip()
-                if "User: When" in response_text:
-                    response_text = response_text.split("User: When")[0].strip()
-                if "User: Where" in response_text:
-                    response_text = response_text.split("User: Where")[0].strip()
-                if "User: Why" in response_text:
-                    response_text = response_text.split("User: Why")[0].strip()
-                if "User: Which" in response_text:
-                    response_text = response_text.split("User: Which")[0].strip()
-                
-                # Remove any trailing "Assistant:" that might have been generated
-                if response_text.endswith("Assistant:"):
-                    response_text = response_text[:-11].strip()
-                
-                generation_end_time = datetime.utcnow()
-                generation_duration = (generation_end_time - generation_start_time).total_seconds() * 1000
-                
-                logger.info(f"🤖 Response generation completed in {generation_duration:.2f}ms")
                 logger.info(f"📊 Response length: {len(response_text)} characters")
-                
                 return response_text
                 
             except Exception as e:
@@ -364,6 +227,42 @@ class LLMService:
         except Exception as e:
             logger.error(f"Error in generate_response: {str(e)}", exc_info=True)
             return f"Error: {str(e)}"
+
+    def _clean_response(self, response_text: str) -> str:
+        """Clean up the response by removing unwanted text patterns"""
+        # Remove implementation suggestions
+        unwanted_patterns = [
+            "Implementing this functionality",
+            "This functionality",
+            "This will help",
+            "This improves"
+        ]
+        
+        for pattern in unwanted_patterns:
+            if pattern in response_text:
+                response_text = response_text.split(pattern)[0].strip()
+        
+        # Clean up fake conversations - remove any text that looks like the model is pretending to be a user
+        user_patterns = [
+            "User: Do you",
+            "User: Can you", 
+            "User: What",
+            "User: How",
+            "User: When",
+            "User: Where",
+            "User: Why",
+            "User: Which"
+        ]
+        
+        for pattern in user_patterns:
+            if pattern in response_text:
+                response_text = response_text.split(pattern)[0].strip()
+        
+        # Remove any trailing "Assistant:" that might have been generated
+        if response_text.endswith("Assistant:"):
+            response_text = response_text[:-11].strip()
+        
+        return response_text
 
     def _should_use_chain_of_thought(self, message: str) -> bool:
         """
@@ -377,11 +276,12 @@ class LLMService:
         """
         message_lower = message.lower()
         
-        # Mathematical problems
+        # Mathematical problems - more specific indicators
         math_indicators = [
-            'calculate', 'solve', 'compute', 'find', 'determine',
-            'what is', 'how much', 'total', 'sum', 'average', 'percentage',
-            'if', 'then', 'equals', 'plus', 'minus', 'times', 'divided by'
+            'calculate', 'solve', 'compute', 'determine',
+            'how much', 'total', 'sum', 'average', 'percentage',
+            'if', 'then', 'equals', 'plus', 'minus', 'times', 'divided by',
+            'multiply', 'divide', 'add', 'subtract', 'equation'
         ]
         
         # Logical reasoning problems
@@ -409,7 +309,15 @@ class LLMService:
         has_programming = any(indicator in message_lower for indicator in programming_indicators)
         has_complexity = any(indicator in message_lower for indicator in complexity_indicators)
         
-        return has_math or has_logic or has_programming or has_complexity
+        # Additional check: don't use CoT for simple factual questions
+        simple_questions = [
+            'what is', 'who is', 'where is', 'when is', 'weather',
+            'temperature', 'time', 'date', 'location', 'address'
+        ]
+        is_simple_question = any(indicator in message_lower for indicator in simple_questions)
+        
+        # Only use CoT if it's a complex problem AND not a simple question
+        return (has_math or has_logic or has_programming or has_complexity) and not is_simple_question
 
     def _add_chain_of_thought_prompt(self, message: str) -> str:
         """

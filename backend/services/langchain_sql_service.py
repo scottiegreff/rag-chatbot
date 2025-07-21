@@ -5,6 +5,9 @@ Replaces the manual pattern matching with AI-powered query generation
 
 import logging
 import asyncio
+import signal
+import re
+import time
 from typing import Dict, Any, Optional
 from langchain.agents import create_sql_agent
 from langchain.sql_database import SQLDatabase
@@ -13,12 +16,11 @@ from langchain.agents.agent_types import AgentType
 from langchain.callbacks import get_openai_callback
 from langchain.llms.base import LLM
 from langchain_core.language_models.llms import LLMResult
+from sqlalchemy import text
+
 from backend.database import engine
 from backend.services.llm_service import LLMService
 from backend.utils.sql_context_builder import get_sql_context_builder
-import re
-from sqlalchemy import text
-import time
 
 logger = logging.getLogger(__name__)
 
@@ -121,10 +123,6 @@ class LLMServiceWrapper(LLM):
         question = self._extract_user_query(prompt)
         
         try:
-            # Query the actual database for real values
-            from backend.database import engine
-            from sqlalchemy import text
-            
             # Generate a simple SQL agent response based on the question
             if "revenue" in question.lower() or "total" in question.lower():
                 with engine.connect() as conn:
@@ -318,32 +316,18 @@ class LangChainSQLService:
         Returns:
             Dict containing processed results or None if not a database query
         """
-        query_start_time = time.time()
-        logger.info(f"🗄️ [TIMING] Starting database query processing for: '{query[:50]}...'")
+        logger.info(f"🗄️ Processing database query: '{query[:50]}...'")
         
         try:
             # Check if this is likely a database query
-            check_start_time = time.time()
             if not self.is_database_query(query):
-                check_end_time = time.time()
-                check_duration = (check_end_time - check_start_time) * 1000
-                logger.info(f"❌ [TIMING] Query check completed in {check_duration:.2f}ms - not a database query")
                 logger.info(f"Query '{query}' doesn't appear to be a database query")
                 return None
             
-            check_end_time = time.time()
-            check_duration = (check_end_time - check_start_time) * 1000
-            logger.info(f"✅ [TIMING] Query check completed in {check_duration:.2f}ms - confirmed as database query")
-            
             # Check if this is a simple query that can use fallback
             if self.is_simple_query(query):
-                logger.info(f"🚀 [TIMING] Using fast fallback for simple query: '{query}'")
-                fallback_start_time = time.time()
-                result = self._fallback_query(query)
-                fallback_end_time = time.time()
-                fallback_duration = (fallback_end_time - fallback_start_time) * 1000
-                logger.info(f"⚡ [TIMING] Fallback query completed in {fallback_duration:.2f}ms")
-                return result
+                logger.info(f"Using fast fallback for simple query: '{query}'")
+                return self._fallback_query(query)
             
             if not self.agent:
                 logger.error("LangChain SQL Agent not initialized")
@@ -355,39 +339,22 @@ class LangChainSQLService:
             logger.info(f"🔍 Processing database query with LangChain: '{query}'")
             
             # Add timeout to prevent hanging
-            import signal
-            
             def timeout_handler(signum, frame):
                 raise TimeoutError("LangChain SQL Agent timed out")
             
-            # Set timeout to 15 seconds (reduced from 60s for faster failure)
+            # Set timeout to 15 seconds
             signal.signal(signal.SIGALRM, timeout_handler)
             signal.alarm(15)
             
             try:
                 # Use LangChain SQL Agent to process the query
-                agent_start_time = time.time()
-                logger.info(f"🤖 [TIMING] Starting LangChain SQL Agent execution")
-                
                 with get_openai_callback() as cb:
-                    start_time = time.time()
                     response = self.agent.run(query)
-                    end_time = time.time()
-                
-                agent_end_time = time.time()
-                agent_duration = (end_time - start_time) * 1000
-                total_agent_duration = (agent_end_time - agent_start_time) * 1000
                 
                 signal.alarm(0)  # Cancel the alarm
                 
                 logger.info(f"✅ LangChain SQL Agent response: {response}")
                 logger.info(f"📊 Token usage: {cb}")
-                logger.info(f"⏱️ [TIMING] LangChain SQL Agent execution completed in {agent_duration:.2f}ms")
-                logger.info(f"⏱️ [TIMING] Total LangChain processing time: {total_agent_duration:.2f}ms")
-                
-                query_end_time = time.time()
-                total_query_duration = (query_end_time - query_start_time) * 1000
-                logger.info(f"🗄️ [TIMING] Total database query processing completed in {total_query_duration:.2f}ms")
                 
                 # Enhance the response with better formatting
                 enhanced_response = self._enhance_response_with_data(query, response)
@@ -407,9 +374,7 @@ class LangChainSQLService:
                 
             except TimeoutError:
                 signal.alarm(0)  # Cancel the alarm
-                timeout_end_time = time.time()
-                timeout_duration = (timeout_end_time - query_start_time) * 1000
-                logger.error(f"⏰ [TIMING] LangChain SQL Agent timed out after {timeout_duration:.2f}ms")
+                logger.error("⏰ LangChain SQL Agent timed out after 15 seconds")
                 return {
                     'success': False,
                     'error': 'SQL Agent timed out after 15 seconds',
@@ -417,9 +382,7 @@ class LangChainSQLService:
                 }
             except Exception as agent_error:
                 signal.alarm(0)  # Cancel the alarm
-                error_end_time = time.time()
-                error_duration = (error_end_time - query_start_time) * 1000
-                logger.error(f"❌ [TIMING] LangChain SQL Agent error after {error_duration:.2f}ms: {agent_error}")
+                logger.error(f"❌ LangChain SQL Agent error: {agent_error}")
                 return {
                     'success': False,
                     'error': f'Agent error: {str(agent_error)}',
@@ -427,9 +390,7 @@ class LangChainSQLService:
                 }
                 
         except Exception as e:
-            error_end_time = time.time()
-            error_duration = (error_end_time - query_start_time) * 1000
-            logger.error(f"❌ [TIMING] Error processing query after {error_duration:.2f}ms: {e}")
+            logger.error(f"❌ Error processing query: {e}")
             return {
                 'success': False,
                 'error': str(e),
@@ -480,13 +441,9 @@ class LangChainSQLService:
             
             # Customer count queries
             if re.search(r"how many.*customer(s)?", query_lower) or ("how many" in query_lower and ("customer" in query_lower or "customers" in query_lower)):
-                logger.info(f"[Fallback] Matched customer count query: '{query}'")
-                logger.info(f"[Fallback] Executing SQL: SELECT COUNT(*) as count FROM customers")
-                from backend.database import engine
                 with engine.connect() as conn:
                     result = conn.execute(text("SELECT COUNT(*) as count FROM customers"))
                     count = result.fetchone()[0]
-                logger.info(f"[Fallback] SQL Result: count={count}")
                 return {
                     'success': True,
                     'query': query,
@@ -497,12 +454,9 @@ class LangChainSQLService:
             
             # Order count queries
             elif "how many orders" in query_lower or "count of orders" in query_lower or "number of orders" in query_lower:
-                logger.info(f"[Fallback] Executing SQL: SELECT COUNT(*) as count FROM orders")
-                from backend.database import engine
                 with engine.connect() as conn:
                     result = conn.execute(text("SELECT COUNT(*) as count FROM orders"))
                     count = result.fetchone()[0]
-                logger.info(f"[Fallback] SQL Result: count={count}")
                 return {
                     'success': True,
                     'query': query,
@@ -513,12 +467,9 @@ class LangChainSQLService:
             
             # Product count queries
             elif "how many products" in query_lower or "count of products" in query_lower or "number of products" in query_lower:
-                logger.info(f"[Fallback] Executing SQL: SELECT COUNT(*) as count FROM products")
-                from backend.database import engine
                 with engine.connect() as conn:
                     result = conn.execute(text("SELECT COUNT(*) as count FROM products"))
                     count = result.fetchone()[0]
-                logger.info(f"[Fallback] SQL Result: count={count}")
                 return {
                     'success': True,
                     'query': query,
@@ -534,13 +485,9 @@ class LangChainSQLService:
                 or ("sum" in query_lower and "order" in query_lower)
                 or "revenue from orders" in query_lower
             ):
-                sql = "SELECT SUM(total) as total FROM orders"
-                logger.info(f"[Fallback] Executing SQL: {sql}")
-                from backend.database import engine
                 with engine.connect() as conn:
-                    result = conn.execute(text(sql))
+                    result = conn.execute(text("SELECT SUM(total) as total FROM orders"))
                     total = result.fetchone()[0] or 0
-                logger.info(f"[Fallback] SQL Result: total={total}")
                 return {
                     'success': True,
                     'query': query,
@@ -551,7 +498,6 @@ class LangChainSQLService:
             
             # Average order queries
             elif "average order" in query_lower or "avg order" in query_lower or "mean order" in query_lower:
-                from backend.database import engine
                 with engine.connect() as conn:
                     result = conn.execute(text("SELECT AVG(total) as avg FROM orders"))
                     avg = result.fetchone()[0] or 0
@@ -565,7 +511,6 @@ class LangChainSQLService:
             
             # Best selling product queries
             elif any(phrase in query_lower for phrase in ["best selling product", "top selling product", "most popular product", "highest selling product", "product with most sales", "best performing product"]):
-                from backend.database import engine
                 with engine.connect() as conn:
                     result = conn.execute(text("""
                         SELECT p.name, p.price, c.name as category_name, COUNT(oi.id) as sales_count, SUM(oi.quantity) as total_quantity
@@ -597,76 +542,66 @@ class LangChainSQLService:
             
             # Top customer queries
             elif any(phrase in query_lower for phrase in ["top customer", "best customer", "customer with most orders", "biggest customer", "customer who spent the most", "highest spending customer"]) or "top 5 customers" in query_lower:
-                try:
-                    from backend.database import engine
-                    with engine.connect() as conn:
-                        result = conn.execute(text("""
-                            SELECT c.first_name, c.last_name, c.email, COUNT(o.id) as order_count, SUM(o.total) as total_spent
-                            FROM customers c
-                            LEFT JOIN orders o ON c.id = o.customer_id
-                            GROUP BY c.id, c.first_name, c.last_name, c.email
-                            ORDER BY total_spent DESC NULLS LAST, order_count DESC NULLS LAST
-                            LIMIT 1
-                        """))
-                        customer = result.fetchone()
-                        
-                        if customer and customer[4]:  # If there are orders
-                            # Check if this is specifically asking for top 5 customers
-                            if "top 5" in query_lower or "5 customers" in query_lower:
-                                # Get top 5 customers
-                                result_top5 = conn.execute(text("""
-                                    SELECT c.first_name, c.last_name, c.email, COUNT(o.id) as order_count, SUM(o.total) as total_spent
-                                    FROM customers c
-                                    LEFT JOIN orders o ON c.id = o.customer_id
-                                    GROUP BY c.id, c.first_name, c.last_name, c.email
-                                    ORDER BY total_spent DESC NULLS LAST, order_count DESC NULLS LAST
-                                    LIMIT 5
-                                """))
-                                top5_customers = result_top5.fetchall()
-                                
-                                if top5_customers:
-                                    response = "Here are the top 5 customers by total spending:\n\n"
-                                    for i, cust in enumerate(top5_customers, 1):
-                                        if cust[4]:  # If they have spent money
-                                            response += f"{i}. **{cust[0]} {cust[1]}** - ${cust[4]:,.2f} ({cust[3]} orders)\n"
-                                        else:
-                                            response += f"{i}. **{cust[0]} {cust[1]}** - No orders yet\n"
-                                    
-                                    return {
-                                        'success': True,
-                                        'query': query,
-                                        'response': response,
-                                        'sql_generated': False,
-                                        'fallback': True
-                                    }
+                with engine.connect() as conn:
+                    result = conn.execute(text("""
+                        SELECT c.first_name, c.last_name, c.email, COUNT(o.id) as order_count, SUM(o.total) as total_spent
+                        FROM customers c
+                        LEFT JOIN orders o ON c.id = o.customer_id
+                        GROUP BY c.id, c.first_name, c.last_name, c.email
+                        ORDER BY total_spent DESC NULLS LAST, order_count DESC NULLS LAST
+                        LIMIT 1
+                    """))
+                    customer = result.fetchone()
+                    
+                    if customer and customer[4]:  # If there are orders
+                        # Check if this is specifically asking for top 5 customers
+                        if "top 5" in query_lower or "5 customers" in query_lower:
+                            # Get top 5 customers
+                            result_top5 = conn.execute(text("""
+                                SELECT c.first_name, c.last_name, c.email, COUNT(o.id) as order_count, SUM(o.total) as total_spent
+                                FROM customers c
+                                LEFT JOIN orders o ON c.id = o.customer_id
+                                GROUP BY c.id, c.first_name, c.last_name, c.email
+                                ORDER BY total_spent DESC NULLS LAST, order_count DESC NULLS LAST
+                                LIMIT 5
+                            """))
+                            top5_customers = result_top5.fetchall()
                             
-                            # Default to top customer
-                            return {
-                                'success': True,
-                                'query': query,
-                                'response': f"The top customer is {customer[0]} {customer[1]} ({customer[2]}) with ${customer[4]:,.2f} total spent across {customer[3]} orders.",
-                                'sql_generated': False,
-                                'fallback': True
-                            }
-                        else:
-                            return {
-                                'success': True,
-                                'query': query,
-                                'response': "No order data available to determine the top customer.",
-                                'sql_generated': False,
-                                'fallback': True
-                            }
-                except Exception as e:
-                    logger.error(f"Error in fallback query: {e}")
-                    return {
-                        'success': False,
-                        'error': f'Fallback error: {str(e)}',
-                        'query': query
-                    }
+                            if top5_customers:
+                                response = "Here are the top 5 customers by total spending:\n\n"
+                                for i, cust in enumerate(top5_customers, 1):
+                                    if cust[4]:  # If they have spent money
+                                        response += f"{i}. **{cust[0]} {cust[1]}** - ${cust[4]:,.2f} ({cust[3]} orders)\n"
+                                    else:
+                                        response += f"{i}. **{cust[0]} {cust[1]}** - No orders yet\n"
+                                
+                                return {
+                                    'success': True,
+                                    'query': query,
+                                    'response': response,
+                                    'sql_generated': False,
+                                    'fallback': True
+                                }
+                        
+                        # Default to top customer
+                        return {
+                            'success': True,
+                            'query': query,
+                            'response': f"The top customer is {customer[0]} {customer[1]} ({customer[2]}) with ${customer[4]:,.2f} total spent across {customer[3]} orders.",
+                            'sql_generated': False,
+                            'fallback': True
+                        }
+                    else:
+                        return {
+                            'success': True,
+                            'query': query,
+                            'response': "No order data available to determine the top customer.",
+                            'sql_generated': False,
+                            'fallback': True
+                        }
             
             # Largest order queries
             elif any(phrase in query_lower for phrase in ["largest order", "biggest order", "highest order", "order with highest total", "most expensive order"]):
-                from backend.database import engine
                 with engine.connect() as conn:
                     result = conn.execute(text("""
                         SELECT o.id, o.total, o.order_date, c.first_name, c.last_name
@@ -696,7 +631,6 @@ class LangChainSQLService:
             
             # Most expensive product queries
             elif any(phrase in query_lower for phrase in ["most expensive product", "highest priced product", "product with highest price"]):
-                from backend.database import engine
                 with engine.connect() as conn:
                     result = conn.execute(text("""
                         SELECT p.name, p.price, c.name as category_name
@@ -726,7 +660,6 @@ class LangChainSQLService:
             
             # Cheapest product queries
             elif any(phrase in query_lower for phrase in ["cheapest product", "lowest priced product", "product with lowest price"]):
-                from backend.database import engine
                 with engine.connect() as conn:
                     result = conn.execute(text("""
                         SELECT p.name, p.price, c.name as category_name
@@ -774,7 +707,6 @@ class LangChainSQLService:
                     order_by = "p.name ASC"
                     product_type = "products"
                 
-                from backend.database import engine
                 with engine.connect() as conn:
                     if "best selling" in product_type:
                         # For best selling, we need to join with order_items
@@ -811,7 +743,6 @@ class LangChainSQLService:
             
             # List products queries
             elif "list all products" in query_lower or "show all products" in query_lower:
-                from backend.database import engine
                 with engine.connect() as conn:
                     result = conn.execute(text("""
                         SELECT p.name, p.price, c.name as category_name
@@ -831,7 +762,6 @@ class LangChainSQLService:
             
             # List customers queries
             elif "list all customers" in query_lower or "show all customers" in query_lower:
-                from backend.database import engine
                 with engine.connect() as conn:
                     result = conn.execute(text("SELECT first_name, last_name, email FROM customers LIMIT 10"))
                     customers = result.fetchall()
@@ -846,7 +776,6 @@ class LangChainSQLService:
             
             # Products by category queries
             elif "products by category" in query_lower or "category breakdown" in query_lower:
-                from backend.database import engine
                 with engine.connect() as conn:
                     result = conn.execute(text("""
                         SELECT c.name as category_name, COUNT(p.id) as product_count, AVG(p.price) as avg_price
@@ -867,7 +796,6 @@ class LangChainSQLService:
             
             # Recent orders queries
             elif any(phrase in query_lower for phrase in ["recent orders", "latest orders", "newest orders"]):
-                from backend.database import engine
                 with engine.connect() as conn:
                     result = conn.execute(text("""
                         SELECT o.id, o.total, o.order_date, c.first_name, c.last_name

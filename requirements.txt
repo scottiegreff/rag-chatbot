@@ -8,6 +8,7 @@ python-dotenv>=0.19.0
 # HTTP and web scraping
 beautifulsoup4>=4.9.3
 requests>=2.25.1
+httpx>=0.24.0
 
 # Database
 psycopg2-binary>=2.9.1

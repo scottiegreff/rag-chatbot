@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 # Get configuration from environment variables
 SYSTEM_INSTRUCTION = os.getenv(
     "SYSTEM_INSTRUCTION",
-    """You are an AI Chatbot assistant for this FCIAS a software company in Regina SK, their website is https://www.fcicanada.com. They sell a Information Management System (IMS) called iTrac IMS. Your main goal is to assist visitors with questions and provide helpful information. Here are your key guidelines:
+    """You are an AI RAG Chatbot assistant. Your main goal is to assist users with questions and provide helpful information based on the knowledge base. Here are your key guidelines:
 
 # Response Style - CRITICALLY IMPORTANT
 - No phrases like "based on my knowledge" or "according to information"
@@ -37,17 +37,18 @@ SYSTEM_INSTRUCTION = os.getenv(
 - No summaries or repetition
 - Hyperlink all URLs
 - Respond in user's language
+- Use markdown formatting: **bold**, *italic*, `code`, ```blocks```, lists (- or 1.), ## headings, > quotes.
 
 # Knowledge Base Requirements - PREVENT HALLUCINATIONS
-- ONLY answer using information explicitly provided in OFFICIAL KNOWLEDGE DATABASE CONTENT sections marked with ===== delimiters
 - If required information is NOT in the knowledge database: "I don't have enough information in my knowledge base to answer that question accurately."
 - NEVER invent or hallucinate URLs, links, product specs, procedures, dates, statistics, names, contacts, or company information
 - When knowledge base information is unclear or contradictory, acknowledge the limitation rather than guessing
-- Better to admit insufficient information than provide inaccurate answers"""
+- Better to admit insufficient information than provide inaccurate answers
+- PRIORITIZE the provided context from the knowledge base over any general knowledge"""
 )
 
 MAX_HISTORY_MESSAGES = int(os.getenv("MAX_HISTORY_MESSAGES", "10"))
-RAG_CONTEXT_MESSAGES = int(os.getenv("RAG_CONTEXT_MESSAGES", "2"))
+RAG_CONTEXT_MESSAGES = int(os.getenv("RAG_CONTEXT_MESSAGES", "5"))
 ENABLE_RAG = os.getenv("ENABLE_RAG", "true").lower() == "true"
 
 class MessageRequest(BaseModel):
@@ -59,14 +60,11 @@ class MessageResponse(BaseModel):
     session_id: str
     response: str
 
-class TestMessage(BaseModel):
-    message: str
-
-class MetadataQueryRequest(BaseModel):
+class HybridSearchRequest(BaseModel):
     query: str
-    location: Optional[str] = None
-    category: Optional[str] = None
-    n_results: int = 5
+    n_local_results: int = 3
+    n_web_results: int = 3
+    include_internet: bool = True
 
 router = APIRouter()
 
@@ -88,14 +86,6 @@ else:
 logger.info("🎉 All services loaded successfully")
 
 # Helper functions
-async def reset_llm_service():
-    """Reset the LLM service to force fresh model loading"""
-    logger.info("🔄 Resetting LLM service...")
-    LLMService.reset_instance()
-    global llm_service
-    llm_service = LLMService()
-    logger.info("✅ LLM service reset and reinitialized")
-
 async def get_or_create_session(session_id: Optional[str], db: Session) -> ChatSession:
     """Get an existing session or create a new one"""
     if session_id:
@@ -152,22 +142,57 @@ async def get_rag_context(query: str) -> str:
         rag_end_time = datetime.utcnow()
         rag_duration = (rag_end_time - rag_start_time).total_seconds() * 1000
         
-        if results and len(results) > 0:
+        # Handle Weaviate v4 GenerativeReturn object
+        if hasattr(results, 'objects') and results.objects:
             # Extract content from Weaviate objects (new v4 API format)
             context_parts = []
-            for obj in results:
+            for i, obj in enumerate(results.objects):
                 if hasattr(obj, 'properties') and 'content' in obj.properties:
-                    # Clean up the text by removing extra spaces and newlines
+                    # Clean up the text while preserving important formatting
                     content = obj.properties['content']
-                    # Replace multiple newlines and spaces with single spaces
+                    # Handle excessive newlines and spaces that are common in PDF extractions
+                    # First, replace multiple newlines with single newlines
+                    content = '\n'.join(line.strip() for line in content.split('\n') if line.strip())
+                    # Then replace multiple spaces with single space
                     cleaned_content = ' '.join(content.split())
-                    context_parts.append(cleaned_content)
+                    # Add document source information
+                    source = obj.properties.get('source', 'Unknown source')
+                    category = obj.properties.get('category', 'General')
+                    context_parts.append(f"[Document {i+1} - {source} - {category}]: {cleaned_content}")
+            
+            if context_parts:
+                context = "\n\n".join(context_parts)
+                logger.info(f"✅ Vector DB search completed in {rag_duration:.2f}ms - Found {len(results.objects)} relevant documents")
+                logger.info(f"📄 RAG context length: {len(context)} characters")
+                return f"""Here is relevant context from the knowledge base:
+
+{context}
+
+Please use this context to provide accurate and detailed information. If the context contains specific details, facts, or information that answers the user's question, make sure to include those details in your response. If the context doesn't fully answer the question, you may supplement with your general knowledge, but prioritize the provided context."""
+            else:
+                logger.info(f"⚠️  Vector DB search completed in {rag_duration:.2f}ms - No content found in results")
+                return "No relevant documents found in the knowledge base. Please respond based on your general knowledge and training data."
+        elif isinstance(results, list) and len(results) > 0:
+            # Handle legacy list format
+            context_parts = []
+            for i, obj in enumerate(results):
+                if hasattr(obj, 'properties') and 'content' in obj.properties:
+                    content = obj.properties['content']
+                    content = '\n'.join(line.strip() for line in content.split('\n') if line.strip())
+                    cleaned_content = ' '.join(content.split())
+                    source = obj.properties.get('source', 'Unknown source')
+                    category = obj.properties.get('category', 'General')
+                    context_parts.append(f"[Document {i+1} - {source} - {category}]: {cleaned_content}")
             
             if context_parts:
                 context = "\n\n".join(context_parts)
                 logger.info(f"✅ Vector DB search completed in {rag_duration:.2f}ms - Found {len(results)} relevant documents")
                 logger.info(f"📄 RAG context length: {len(context)} characters")
-                return f"Here is some relevant context:\n\n{context}\n\nBased on this context, "
+                return f"""Here is relevant context from the knowledge base:
+
+{context}
+
+Please use this context to provide accurate and detailed information. If the context contains specific details, facts, or information that answers the user's question, make sure to include those details in your response. If the context doesn't fully answer the question, you may supplement with your general knowledge, but prioritize the provided context."""
             else:
                 logger.info(f"⚠️  Vector DB search completed in {rag_duration:.2f}ms - No content found in results")
                 return "No relevant documents found in the knowledge base. Please respond based on your general knowledge and training data."
@@ -210,7 +235,7 @@ Respond naturally based on the database information above. Use the exact numbers
             )
         else:
             # Get enhanced context including database schema if relevant
-            context = rag_service.get_context_for_query(request.message)
+            context = await get_rag_context(request.message)
             
             # Create the system instruction with enhanced context
             if context and "relevant context" in context:
@@ -400,41 +425,25 @@ Respond naturally based on the database information above. Use the exact numbers
                 except Exception as e:
                     logger.error(f"Error sending final buffer: {str(e)}")
             
-            # Send end marker
-            yield "data: {}\n\n".format(json.dumps({'end': True}))
-            
-            # Save the complete response
-            save_response_start_time = time.time()
+            # Save the complete response to database
             await save_message(session.id, "assistant", full_response, db)
-            save_response_end_time = time.time()
-            save_response_duration = (save_response_end_time - save_response_start_time) * 1000
             
             # Update session timestamp
             session.updated_at = datetime.utcnow()
             db.commit()
             
-            # Log completion
+            # Calculate final timing
             llm_end_time = time.time()
             llm_duration = (llm_end_time - llm_start_time) * 1000
             total_duration = (llm_end_time - request_start_time) * 1000
             
-            logger.info(f"✅ LLM response generation completed in {llm_duration:.2f}ms")
-            logger.info(f"📊 Response length: {len(full_response)} characters")
-            logger.info(f"⏱️  Total request processing time: {total_duration:.2f}ms")
-            logger.info(f"💾 Response saved to database (took {save_response_duration:.2f}ms)")
-            logger.info("🎉 Streaming response complete")
+            logger.info(f"🎯 [TIMING] LLM response generation completed in {llm_duration:.2f}ms")
+            logger.info(f"⏱️ [TIMING] Total request time: {total_duration:.2f}ms")
+            logger.info(f"📊 [TIMING] Generated {token_count} tokens, {len(full_response)} characters")
             
-            # Log timing breakdown
-            logger.info("📈 TIMING BREAKDOWN:")
-            logger.info(f"  • Session management: {session_duration:.2f}ms")
-            logger.info(f"  • Save user message: {save_duration:.2f}ms")
-            logger.info(f"  • Get chat history: {history_duration:.2f}ms")
-            if rag_duration > 0:
-                logger.info(f"  • RAG context search: {rag_duration:.2f}ms")
-            logger.info(f"  • Pre-LLM processing: {pre_llm_duration:.2f}ms")
-            logger.info(f"  • LLM generation: {llm_duration:.2f}ms")
-            logger.info(f"  • Save response to DB: {save_response_duration:.2f}ms")
-            logger.info(f"  • TOTAL: {total_duration:.2f}ms")
+            # Signal completion
+            yield "data: {}\n\n".format(json.dumps({'done': True}))
+            logger.info("✅ Streaming response complete")
             
         except Exception as e:
             logger.error(f"Error in response generator: {str(e)}")
@@ -443,109 +452,6 @@ Respond naturally based on the database information above. Use the exact numbers
             yield "data: {}\n\n".format(json.dumps({'end': True}))
     
     return StreamingResponse(response_generator(), media_type="text/plain")
-
-@router.get("/chat/stream")
-async def stream_chat_get(message: str, session_id: Optional[str] = None, db: Session = Depends(get_db)):
-    """Stream chat responses using GET"""
-    # Get or create session
-    session = await get_or_create_session(session_id, db)
-    
-    # Save user message
-    await save_message(session.id, "user", message, db)
-    
-    # Get conversation history
-    history = await get_chat_history(session.id, db)
-    
-    # Get relevant context from RAG
-    context = await get_rag_context(message)
-    
-    # Determine the system instruction based on RAG context availability
-    if context and "relevant context" in context:
-        # Combine RAG context with the optimized system instruction
-        system_instruction = f"{SYSTEM_INSTRUCTION}\n\n{context}"
-        logger.info("🔍 Using RAG context combined with optimized system instruction")
-    else:
-        # Use base system instruction when no RAG context is available
-        system_instruction = SYSTEM_INSTRUCTION
-    
-    async def response_generator():
-        # First, send the session ID
-        yield f"data: {json.dumps({'session_id': session.session_id})}\n\n"
-        
-        try:
-            logger.info(f"Starting streaming response for: {message[:50]}...")
-            
-            # Use the streaming method from llm_service
-            full_response = ""
-            async for token in llm_service.generate_streaming_response(
-                message,
-                history[:-1] if history else None,  # Exclude the latest message
-                system_instruction=system_instruction
-            ):
-                full_response += token
-                yield f"data: {json.dumps({'delta': token})}\n\n"
-            
-            # Save the complete response to database
-            await save_message(session.id, "assistant", full_response, db)
-            
-            # Update session timestamp
-            session.updated_at = datetime.utcnow()
-            db.commit()
-            
-            # Signal completion
-            yield f"data: {json.dumps({'done': True})}\n\n"
-            logger.info("Streaming response complete")
-            
-        except Exception as e:
-            logger.error(f"Error in streaming: {str(e)}", exc_info=True)
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
-    
-    return StreamingResponse(
-        response_generator(),
-        media_type="text/event-stream"
-    )
-
-@router.get("/test-stream")
-async def test_stream():
-    """Simple test endpoint for streaming"""
-    
-    async def test_generator():
-        logger.info("Starting test stream...")
-        yield f"data: {json.dumps({'message': 'Stream test started'})}\n\n"
-        await asyncio.sleep(1)
-        yield f"data: {json.dumps({'message': 'Part 1'})}\n\n"
-        await asyncio.sleep(1)
-        yield f"data: {json.dumps({'message': 'Part 2'})}\n\n"
-        await asyncio.sleep(1)
-        yield f"data: {json.dumps({'message': 'Complete'})}\n\n"
-        logger.info("Test stream complete")
-    
-    return StreamingResponse(
-        test_generator(),
-        media_type="text/event-stream"
-    )
-
-@router.post("/test-stream-post")
-async def test_stream_post(request: TestMessage):
-    """Simple test endpoint for POST-based streaming"""
-    
-    async def test_generator():
-        logger.info(f"Starting test stream for message: {request.message}")
-        yield f"data: {json.dumps({'session_id': '123-test-session'})}\n\n"
-        await asyncio.sleep(0.5)
-        yield f"data: {json.dumps({'delta': f'You said: {request.message}. '})}\n\n"
-        await asyncio.sleep(0.5)
-        yield f"data: {json.dumps({'delta': 'This is a test response part 1.'})}\n\n"
-        await asyncio.sleep(0.5)
-        yield f"data: {json.dumps({'delta': ' This is part 2 of the response.'})}\n\n"
-        await asyncio.sleep(0.5)
-        yield f"data: {json.dumps({'done': True})}\n\n"
-        logger.info("Test stream complete")
-    
-    return StreamingResponse(
-        test_generator(),
-        media_type="text/event-stream"
-    )
 
 @router.delete("/session/{session_id}")
 async def delete_session(session_id: str, db: Session = Depends(get_db)):
@@ -663,140 +569,12 @@ async def create_new_session(db: Session = Depends(get_db)):
         logger.error(f"❌ Error creating new session: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error creating new session: {str(e)}")
 
-@router.post("/reset-llm")
-async def reset_llm():
-    """Reset the LLM service to force fresh model loading"""
-    try:
-        await reset_llm_service()
-        return {"message": "LLM service reset successfully", "status": "success"}
-    except Exception as e:
-        logger.error(f"❌ Error resetting LLM service: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error resetting LLM service: {str(e)}")
-
-# Metadata-enhanced query endpoints
-@router.post("/query/metadata")
-async def query_with_metadata(request: MetadataQueryRequest):
-    """Query documents with metadata filtering"""
-    if not ENABLE_RAG:
-        raise HTTPException(status_code=400, detail="RAG is disabled")
-    
-    try:
-        logger.info(f"🔍 Metadata query: '{request.query[:50]}...' (location: {request.location}, category: {request.category})")
-        
-        # Build metadata filter
-        metadata_filter = {}
-        if request.location:
-            metadata_filter["location"] = request.location
-        if request.category:
-            metadata_filter["category"] = request.category
-        
-        # Query with metadata filter
-        results = rag_service.query_documents(
-            request.query, 
-            n_results=request.n_results,
-            metadata_filter=metadata_filter if metadata_filter else None
-        )
-        
-        # Format results
-        formatted_results = []
-        if results and results['documents']:
-            for i, doc in enumerate(results['documents'][0]):
-                metadata = results['metadatas'][0][i] if results['metadatas'] and results['metadatas'][0] else {}
-                formatted_results.append({
-                    "content": doc,
-                    "metadata": metadata,
-                    "distance": results['distances'][0][i] if results['distances'] and results['distances'][0] else None
-                })
-        
-        logger.info(f"✅ Metadata query completed - Found {len(formatted_results)} results")
-        return {
-            "query": request.query,
-            "filters": metadata_filter,
-            "results": formatted_results,
-            "total_results": len(formatted_results)
-        }
-        
-    except Exception as e:
-        logger.error(f"❌ Error in metadata query: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Query failed: {str(e)}")
-
-@router.get("/documents")
-async def list_documents(category: Optional[str] = Query(None)):
-    """List all documents, optionally filtered by category"""
-    if not ENABLE_RAG:
-        raise HTTPException(status_code=400, detail="RAG is disabled")
-    
-    try:
-        documents = rag_service.list_documents_by_category(category)
-        
-        # Format documents for response
-        formatted_docs = []
-        for doc in documents:
-            formatted_docs.append({
-                "title": doc.get("title", "Untitled"),
-                "category": doc.get("category", "Unknown"),
-                "location": doc.get("location", "Unknown"),
-                "upload_date": doc.get("upload_date"),
-                "tags": doc.get("tags", []),
-                "general_questions": doc.get("general_questions", []),
-                "description": doc.get("description"),
-                "source": doc.get("source")
-            })
-        
-        logger.info(f"📋 Retrieved {len(formatted_docs)} documents (category filter: {category})")
-        return {
-            "documents": formatted_docs,
-            "total_count": len(formatted_docs),
-            "category_filter": category
-        }
-        
-    except Exception as e:
-        logger.error(f"❌ Error listing documents: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to list documents: {str(e)}")
-
-# Internet Search Endpoints
-class InternetSearchRequest(BaseModel):
-    query: str
-    num_results: int = 5
-    engine: str = "duckduckgo"
-
-class HybridSearchRequest(BaseModel):
-    query: str
-    n_local_results: int = 3
-    n_web_results: int = 3
-    include_internet: bool = True
-
-@router.post("/search/internet")
-async def search_internet(request: InternetSearchRequest):
-    """Perform internet search only"""
-    try:
-        if not rag_service or not rag_service.search_service:
-            raise HTTPException(status_code=503, detail="Internet search service not available")
-        
-        logger.info(f"🌐 Internet search requested for: {request.query}")
-        results = rag_service.search_internet_only(
-            query=request.query,
-            num_results=request.num_results
-        )
-        
-        return {
-            "query": request.query,
-            "results": results['web_results'],
-            "summary": results['summary'],
-            "total_results": len(results['web_results'])
-        }
-        
-    except Exception as e:
-        logger.error(f"Internet search failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
-
 @router.post("/search/hybrid")
 async def hybrid_search(request: HybridSearchRequest):
     """Perform hybrid search combining local RAG with internet search"""
     try:
         if not rag_service:
             raise HTTPException(status_code=503, detail="RAG service not available")
-        
         logger.info(f"🔍 Hybrid search requested for: {request.query}")
         results = rag_service.hybrid_search(
             query=request.query,
@@ -804,43 +582,24 @@ async def hybrid_search(request: HybridSearchRequest):
             n_web_results=request.n_web_results,
             include_internet=request.include_internet
         )
-        
+        local_results = results['local_results']
+        # Handle Weaviate v4 GenerativeReturn object
+        if hasattr(local_results, 'objects') and local_results.objects:
+            local_count = len(local_results.objects)
+        elif isinstance(local_results, dict) and 'documents' in local_results:
+            local_count = len(local_results.get('documents', []))
+        elif isinstance(local_results, list):
+            local_count = len(local_results)
+        else:
+            local_count = 0
         return {
             "query": request.query,
-            "local_results": results['local_results'],
+            "local_results": local_results,
             "web_results": results['web_results'],
             "summary": results['summary'],
-            "local_count": len(results['local_results'].get('documents', [])),
+            "local_count": local_count,
             "web_count": len(results['web_results']) if results['web_results'] else 0
         }
-        
     except Exception as e:
         logger.error(f"Hybrid search failed: {e}")
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
-
-@router.get("/search/status")
-async def search_status():
-    """Check if internet search is available"""
-    try:
-        if not rag_service:
-            return {
-                "rag_available": False,
-                "internet_search_available": False,
-                "message": "RAG service not available"
-            }
-        
-        internet_available = rag_service.search_service is not None
-        
-        return {
-            "rag_available": True,
-            "internet_search_available": internet_available,
-            "message": "All services available" if internet_available else "Internet search not available"
-        }
-        
-    except Exception as e:
-        logger.error(f"Status check failed: {e}")
-        return {
-            "rag_available": False,
-            "internet_search_available": False,
-            "message": f"Service check failed: {str(e)}"
-        }

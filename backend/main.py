@@ -12,8 +12,8 @@ load_dotenv()
 from backend.routes import chat
 from backend.routes import upload
 from backend.routes import ecommerce
-from backend.routes import minimal_test
 from backend.routes import database
+from backend.routes import url_validation
 from backend.database import init_db
 
 # Get server configuration from environment variables
@@ -38,8 +38,8 @@ app.add_middleware(
 app.include_router(chat.router, prefix="/api", tags=["chat"])
 app.include_router(upload.router, prefix="/api", tags=["upload"])
 app.include_router(ecommerce.router, prefix="/api/ecommerce", tags=["ecommerce"])
-app.include_router(minimal_test.router, prefix="/api", tags=["minimal"])
 app.include_router(database.router, prefix="/api/database", tags=["database"])
+app.include_router(url_validation.router, tags=["url-validation"])
 
 # Mount static files for frontend
 frontend_dir = Path(__file__).parent.parent / "frontend"

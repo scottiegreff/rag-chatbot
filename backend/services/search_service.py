@@ -6,6 +6,7 @@ from urllib.parse import quote_plus
 import time
 from bs4 import BeautifulSoup
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -23,8 +24,10 @@ class SearchService:
         self.search_engines = {
             'duckduckgo': self._search_duckduckgo,
             'google': self._search_google,
-            'bing': self._search_bing
+            'bing': self._search_bing,
+            'serpapi': self._search_serpapi
         }
+        self.serpapi_api_key = os.getenv('SERPAPI_API_KEY')
     
     def search(self, query: str, num_results: int = 5, engine: str = 'duckduckgo') -> List[Dict]:
         """
@@ -39,6 +42,9 @@ class SearchService:
             List of search results with title, url, and snippet
         """
         try:
+            if engine == 'serpapi' and self.serpapi_api_key:
+                logger.info(f"Searching for: {query} using SerpAPI")
+                return self._search_serpapi(query, num_results)
             if engine not in self.search_engines:
                 logger.warning(f"Unknown search engine: {engine}, using duckduckgo")
                 engine = 'duckduckgo'
@@ -219,6 +225,35 @@ class SearchService:
             
         except Exception as e:
             logger.error(f"Bing search failed: {e}")
+            return []
+    
+    def _search_serpapi(self, query: str, num_results: int) -> List[Dict]:
+        """Search using SerpAPI (Google engine)."""
+        try:
+            if not self.serpapi_api_key:
+                logger.error("SERPAPI_API_KEY not set.")
+                return []
+            url = "https://serpapi.com/search.json"
+            params = {
+                'q': query,
+                'num': num_results,
+                'api_key': self.serpapi_api_key,
+                'engine': 'google',
+            }
+            response = self.session.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            results = []
+            for item in data.get('organic_results', [])[:num_results]:
+                results.append({
+                    'title': item.get('title', ''),
+                    'url': item.get('link', ''),
+                    'snippet': item.get('snippet', ''),
+                    'source': 'serpapi'
+                })
+            return results
+        except Exception as e:
+            logger.error(f"SerpAPI search failed: {e}")
             return []
     
     def _extract_content(self, url: str) -> Optional[str]:
