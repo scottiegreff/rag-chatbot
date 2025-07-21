@@ -56,8 +56,8 @@ export WEAVIATE_URL=http://localhost:8080 && \
 export MODEL_PATH="models/codellama-34b-instruct.Q4_K_M.gguf" && \
 export MODEL_TYPE="llama" && \
 export CONTEXT_LENGTH="8192" && \
-python -m uvicorn backend.main:app --reload --host 0.0.0.0 --port 8010 > logs/backend.log 2>&1 &
+python -m uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000 > logs/backend.log 2>&1 &
 
 echo "✅ Backend started with CodeLlama 34B!"
 echo "📝 Check logs with: tail -f logs/backend.log"
-echo "🌐 Access the chatbot at: http://localhost:8010" 
+echo "🌐 Access the chatbot at: http://localhost:8000" 

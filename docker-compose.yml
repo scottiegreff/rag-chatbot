@@ -86,7 +86,7 @@ services:
       
       # API Configuration
       HOST: 0.0.0.0
-      PORT: 8010
+      PORT: 8000
       DEBUG: ${DEBUG:-false}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
       
@@ -110,9 +110,9 @@ services:
       - sentence_transformer_cache:/root/.cache/huggingface  # Cache for sentence transformer models
       - llm_cache:/root/.cache/llama-cpp  # Cache for llama-cpp models
     ports:
-      - "8010:8010"
+      - "8000:8000"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8010/api/database/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/database/health"]
       interval: 30s
       timeout: 10s
       retries: 3

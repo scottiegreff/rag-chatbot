@@ -7,7 +7,7 @@ import requests
 import json
 import time
 
-BASE_URL = "http://localhost:8010"
+BASE_URL = "http://localhost:8000"
 
 def test_health():
     """Test if the backend is healthy and responding."""

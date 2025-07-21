@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 # Test configuration
-API_BASE_URL = "http://localhost:8010/api"
+API_BASE_URL = "http://localhost:8000/api"
 
 async def test_basic_knowledge():
     """Test the chatbot's basic knowledge and reasoning."""
@@ -160,7 +160,7 @@ async def test_conversation_continuity():
 async def main():
     """Run all tests."""
     print("🚀 Starting basic knowledge and reasoning tests...")
-    print("Make sure the chatbot API is running on http://localhost:8010")
+    print("Make sure the chatbot API is running on http://localhost:8000")
     print()
     
     # Test basic knowledge

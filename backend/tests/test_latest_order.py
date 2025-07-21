@@ -18,7 +18,7 @@ def test_latest_order():
         "Who placed the most recent order?"
     ]
     
-    base_url = "http://localhost:8010/api"
+    base_url = "http://localhost:8000/api"
     
     for question in test_questions:
         print(f"\n{'='*60}")

@@ -11,5 +11,5 @@ echo "⚡ Starting Docker backend..."
 ./switch-to-docker.sh
 
 echo "✅ Docker environment ready!"
-echo "🌐 Backend: http://localhost:8010"
-echo "🔍 Test with: curl -s http://localhost:8010/test" 
+echo "🌐 Backend: http://localhost:8000"
+echo "🔍 Test with: curl -s http://localhost:8000/test" 

@@ -8,7 +8,7 @@ import requests
 import json
 import time
 
-BASE_URL = "http://localhost:8010/api/ecommerce"
+BASE_URL = "http://localhost:8000/api/ecommerce"
 
 def test_stock_checks():
     """Test stock availability checks"""
@@ -215,7 +215,7 @@ def main():
         print("All business logic tests completed!")
         
     except requests.exceptions.ConnectionError:
-        print("Error: Could not connect to the server. Make sure it's running on http://localhost:8010")
+        print("Error: Could not connect to the server. Make sure it's running on http://localhost:8000")
     except Exception as e:
         print(f"Error during testing: {e}")
 

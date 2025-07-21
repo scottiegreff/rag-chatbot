@@ -9,7 +9,7 @@ import json
 import time
 
 # Configuration
-BASE_URL = "http://localhost:8010"
+BASE_URL = "http://localhost:8000"
 API_BASE = f"{BASE_URL}/api"
 
 def test_api_endpoints():
@@ -128,7 +128,7 @@ def main():
     
     print("\n🎉 All tests completed!")
     print("\n📝 Next steps:")
-    print("1. Open http://localhost:8010 in your browser")
+    print("1. Open http://localhost:8000 in your browser")
     print("2. Click the upload button (📤 icon)")
     print("3. Fill out the metadata form")
     print("4. Upload a document and verify it works!")

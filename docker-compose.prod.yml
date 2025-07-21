@@ -8,7 +8,7 @@ services:
       # Production optimizations
       ENABLE_INTERNET_SEARCH: "false"
       RAG_USE_CPU: "true"
-    command: ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8010", "--workers", "1"]
+    command: ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
     volumes:
       # Remove source code mount in production
       - ./models:/app/models:ro

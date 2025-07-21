@@ -8,7 +8,7 @@ import json
 import time
 
 # Configuration
-BASE_URL = "http://localhost:8010"
+BASE_URL = "http://localhost:8000"
 
 def test_search_endpoints():
     """Test the search API endpoints"""

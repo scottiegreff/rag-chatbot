@@ -4,7 +4,7 @@ echo "📊 Current Setup Status"
 echo "========================"
 
 # Check if native backend is running
-if lsof -i:8010 | grep -i python > /dev/null; then
+if lsof -i:8000 | grep -i python > /dev/null; then
     echo "🔧 Backend: Native (M1 GPU)"
     echo "⚡ GPU: Metal acceleration enabled"
     echo "🐍 Python: $(ps aux | grep uvicorn | grep -v grep | head -1 | awk '{print $11}')"

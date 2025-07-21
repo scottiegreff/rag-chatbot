@@ -29,7 +29,7 @@ def test_chat_timing():
     
     try:
         response = requests.post(
-            "http://localhost:8010/api/chat/stream",
+            "http://localhost:8000/api/chat/stream",
             json={
                 "message": test_message,
                 "session_id": None  # Create new session
@@ -114,7 +114,7 @@ def test_rag_timing():
         
         try:
             response = requests.post(
-                "http://localhost:8010/api/chat/stream",
+                "http://localhost:8000/api/chat/stream",
                 json={"message": query},
                 headers={"Content-Type": "application/json"},
                 stream=True
@@ -140,7 +140,7 @@ if __name__ == "__main__":
     print("AI-Chatbot Timing Analysis")
     print("=" * 60)
     print("This script will help identify performance bottlenecks.")
-    print("Make sure your server is running on http://localhost:8010")
+    print("Make sure your server is running on http://localhost:8000")
     print()
     
     # Run tests

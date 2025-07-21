@@ -15,7 +15,7 @@ from typing import Dict, List, Tuple
 
 class SimplePerformanceTester:
     def __init__(self):
-        self.base_url = "http://localhost:8010"
+        self.base_url = "http://localhost:8000"
         self.test_results = {}
         # Always resolve the project root (parent of this script's directory)
         self.project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))

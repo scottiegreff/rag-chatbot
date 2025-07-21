@@ -6,7 +6,7 @@ This document outlines the improvements made to the AI Chatbot Terraform infrast
 ## ✅ Issues Fixed
 
 ### 1. **Port Conflicts Resolved**
-- **Problem**: Flask test server and Docker backend both tried to use port 8010
+- **Problem**: Flask test server and Docker backend both tried to use port 8000
 - **Solution**: 
   - Health server now runs on port 8081 (different from main app)
   - Proper port cleanup before starting Docker containers
@@ -59,7 +59,7 @@ This document outlines the improvements made to the AI Chatbot Terraform infrast
 | Variable | Description | Default | Type |
 |----------|-------------|---------|------|
 | `desired_capacity` | Number of EC2 instances | 1 | number |
-| `app_port` | Application backend port | 8010 | number |
+| `app_port` | Application backend port | 8000 | number |
 | `health_port` | Health check server port | 8081 | number |
 | `git_repository` | Git repository URL | GitHub repo | string |
 | `python_version` | Python version to install | 3.9 | string |
@@ -101,7 +101,7 @@ terraform apply -auto-approve
 ### 2. **Load Balancer**
 - Application Load Balancer
 - Health checks on `/api/database/health`
-- Port 8010 target group
+- Port 8000 target group
 - Public access
 
 ### 3. **Database**
@@ -119,8 +119,8 @@ terraform apply -auto-approve
 
 ### Health Checks
 - **Health Server**: `http://localhost:8081/`
-- **Main App**: `http://localhost:8010/`
-- **Database Health**: `http://localhost:8010/api/database/health`
+- **Main App**: `http://localhost:8000/`
+- **Database Health**: `http://localhost:8000/api/database/health`
 
 ### Log Files
 - **Deployment Log**: `/var/log/app_deployment.log`
@@ -140,7 +140,7 @@ ssh -i your-key.pem ec2-user@<instance-ip>
 
 ### Security Groups
 - **ALB**: HTTP/HTTPS from internet
-- **App**: Port 8010 from ALB, SSH from specified CIDR
+- **App**: Port 8000 from ALB, SSH from specified CIDR
 - **RDS**: PostgreSQL from app servers
 - **EFS**: NFS from app servers
 
@@ -181,8 +181,8 @@ aws autoscaling set-desired-capacity --auto-scaling-group-name app-asg --desired
 
 ### Common Issues
 
-1. **Port 8010 in use**
-   - Check for existing processes: `sudo lsof -i :8010`
+1. **Port 8000 in use**
+   - Check for existing processes: `sudo lsof -i :8000`
    - Kill conflicting processes: `sudo pkill -f test_server.py`
 
 2. **Docker permission issues**
@@ -194,7 +194,7 @@ aws autoscaling set-desired-capacity --auto-scaling-group-name app-asg --desired
    - Restart containers: `sudo docker-compose restart`
 
 4. **Load balancer health check failures**
-   - Verify backend is running: `curl http://localhost:8010/api/database/health`
+   - Verify backend is running: `curl http://localhost:8000/api/database/health`
    - Check security group rules
    - Verify target group configuration
 
@@ -207,7 +207,7 @@ sudo docker ps
 tail -f /var/log/app_deployment.log
 
 # Test local endpoints
-curl http://localhost:8010/
+curl http://localhost:8000/
 curl http://localhost:8081/
 
 # Check system resources

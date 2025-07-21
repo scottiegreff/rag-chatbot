@@ -115,7 +115,7 @@ services:
       
       # API Configuration
       HOST: 0.0.0.0
-      PORT: 8010
+      PORT: 8000
       DEBUG: false
       CORS_ORIGINS: "*"
       
@@ -139,9 +139,9 @@ services:
       - sentence_transformer_cache:/root/.cache/huggingface
       - llm_cache:/root/.cache/llama-cpp
     ports:
-      - "8010:8010"
+      - "8000:8000"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8010/api/database/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/database/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -182,7 +182,7 @@ fi
 docker-compose -f docker-compose.prod.yml up -d
 
 echo "AI Chatbot setup complete!"
-echo "Application will be available at: http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4):8010"
+echo "Application will be available at: http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4):8000"
 EOF
 
 chmod +x setup.sh
@@ -214,7 +214,7 @@ cat > /opt/${project_name}/health_check.sh << 'EOF'
 #!/bin/bash
 
 # Check if the application is running
-if curl -f http://localhost:8010/api/database/health > /dev/null 2>&1; then
+if curl -f http://localhost:8000/api/database/health > /dev/null 2>&1; then
     echo "Application is healthy"
     exit 0
 else

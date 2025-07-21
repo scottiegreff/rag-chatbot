@@ -19,7 +19,7 @@ services:
       # GPU acceleration
       CT_CUDA: "1"
       GPU_LAYERS: "35"
-    command: ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8010", "--workers", "1"]
+    command: ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
     volumes:
       # Remove source code mount in production
       - ./models:/app/models:ro

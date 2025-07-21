@@ -98,7 +98,7 @@ aws ec2 authorize-security-group-ingress \
 aws ec2 authorize-security-group-ingress \
     --group-id "$SG_ID" \
     --protocol tcp \
-    --port 8010 \
+    --port 8000 \
     --cidr 0.0.0.0/0 \
     --region "$REGION" || print_warning "Backend rule may already exist"
 
@@ -250,8 +250,8 @@ echo -e "  Region: ${YELLOW}$REGION${NC}"
 echo ""
 echo -e "${BLUE}Access URLs:${NC}"
 echo -e "  Frontend: ${GREEN}http://$PUBLIC_IP:3000${NC}"
-echo -e "  Backend API: ${GREEN}http://$PUBLIC_IP:8010${NC}"
-echo -e "  Health Check: ${GREEN}http://$PUBLIC_IP:8010/test${NC}"
+echo -e "  Backend API: ${GREEN}http://$PUBLIC_IP:8000${NC}"
+echo -e "  Health Check: ${GREEN}http://$PUBLIC_IP:8000/test${NC}"
 echo ""
 echo -e "${BLUE}SSH Access:${NC}"
 echo -e "  ssh -i $KEY_NAME.pem ubuntu@$PUBLIC_IP"
@@ -282,8 +282,8 @@ Key File: $KEY_NAME.pem
 
 Access URLs:
 - Frontend: http://$PUBLIC_IP:3000
-- Backend API: http://$PUBLIC_IP:8010
-- Health Check: http://$PUBLIC_IP:8010/test
+- Backend API: http://$PUBLIC_IP:8000
+- Health Check: http://$PUBLIC_IP:8000/test
 
 SSH Access:
 ssh -i $KEY_NAME.pem ubuntu@$PUBLIC_IP

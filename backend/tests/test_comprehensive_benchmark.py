@@ -8,7 +8,7 @@ import json
 import time
 from datetime import datetime
 
-BASE_URL = "http://localhost:8010"
+BASE_URL = "http://localhost:8000"
 
 def test_math_questions():
     """Test mathematical reasoning capabilities."""

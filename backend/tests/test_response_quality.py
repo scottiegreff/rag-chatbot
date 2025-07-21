@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 # Test configuration
-API_BASE_URL = "http://localhost:8010/api"
+API_BASE_URL = "http://localhost:8000/api"
 
 async def test_response_quality():
     """Test the chatbot API with questions to verify response quality."""
@@ -153,7 +153,7 @@ async def test_streaming_response():
 async def main():
     """Run all tests."""
     print("🚀 Starting chatbot response quality tests...")
-    print("Make sure the chatbot API is running on http://localhost:8010")
+    print("Make sure the chatbot API is running on http://localhost:8000")
     print()
     
     # Test regular chat endpoint

@@ -16,8 +16,8 @@ from typing import Dict, List, Tuple
 
 class PerformanceTester:
     def __init__(self):
-        # Get port from environment or default to 8010
-        port = os.getenv("PORT", "8010")
+        # Get port from environment or default to 8000
+        port = os.getenv("PORT", "8000")
         self.base_url = f"http://localhost:{port}"
         self.test_results = {}
         self.current_environment = None

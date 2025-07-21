@@ -152,10 +152,10 @@ watch -n 1 nvidia-smi
 ### Test Endpoints
 ```bash
 # Health check
-curl http://localhost:8010/test
+curl http://localhost:8000/test
 
 # API test
-curl -X POST http://localhost:8010/api/chat \
+curl -X POST http://localhost:8000/api/chat \
   -H "Content-Type: application/json" \
   -d '{"message": "What is the total revenue?", "session_id": "test"}'
 ```
@@ -167,7 +167,7 @@ curl -X POST http://localhost:8010/api/chat \
 - **HTTP (80)**: 0.0.0.0/0 (or specific IPs)
 - **HTTPS (443)**: 0.0.0.0/0 (or specific IPs)
 - **Frontend (3000)**: 0.0.0.0/0 (or specific IPs)
-- **Backend (8010)**: 0.0.0.0/0 (or specific IPs)
+- **Backend (8000)**: 0.0.0.0/0 (or specific IPs)
 
 ### Environment Variables
 ```bash

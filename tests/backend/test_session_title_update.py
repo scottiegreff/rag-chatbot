@@ -6,7 +6,7 @@ Test script to verify session title update functionality.
 import requests
 import json
 
-BASE_URL = "http://localhost:8010"
+BASE_URL = "http://localhost:8000"
 
 def test_session_title_update():
     print("🧪 Testing session title update...")

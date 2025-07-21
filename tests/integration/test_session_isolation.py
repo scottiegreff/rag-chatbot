@@ -11,7 +11,7 @@ import requests
 import json
 import time
 
-BASE_URL = "http://localhost:8010"
+BASE_URL = "http://localhost:8000"
 
 def test_session_isolation():
     print("🧪 Testing session isolation...")

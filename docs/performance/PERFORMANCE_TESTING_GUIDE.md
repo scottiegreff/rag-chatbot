@@ -67,7 +67,7 @@ cat testing_summaries/performance_test_*.md | tail -1
 
 - Python 3.7+
 - requests library
-- Backend running on localhost:8010
+- Backend running on localhost:8000
 - Environment switching scripts available
 
 ### Troubleshooting

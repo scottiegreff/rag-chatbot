@@ -542,63 +542,63 @@ class LangChainSQLService:
             
             # Top customer queries
             elif any(phrase in query_lower for phrase in ["top customer", "best customer", "customer with most orders", "biggest customer", "customer who spent the most", "highest spending customer"]) or "top 5 customers" in query_lower:
-                with engine.connect() as conn:
-                    result = conn.execute(text("""
-                        SELECT c.first_name, c.last_name, c.email, COUNT(o.id) as order_count, SUM(o.total) as total_spent
-                        FROM customers c
-                        LEFT JOIN orders o ON c.id = o.customer_id
-                        GROUP BY c.id, c.first_name, c.last_name, c.email
-                        ORDER BY total_spent DESC NULLS LAST, order_count DESC NULLS LAST
-                        LIMIT 1
-                    """))
-                    customer = result.fetchone()
-                    
-                    if customer and customer[4]:  # If there are orders
-                        # Check if this is specifically asking for top 5 customers
-                        if "top 5" in query_lower or "5 customers" in query_lower:
-                            # Get top 5 customers
-                            result_top5 = conn.execute(text("""
-                                SELECT c.first_name, c.last_name, c.email, COUNT(o.id) as order_count, SUM(o.total) as total_spent
-                                FROM customers c
-                                LEFT JOIN orders o ON c.id = o.customer_id
-                                GROUP BY c.id, c.first_name, c.last_name, c.email
-                                ORDER BY total_spent DESC NULLS LAST, order_count DESC NULLS LAST
-                                LIMIT 5
-                            """))
-                            top5_customers = result_top5.fetchall()
-                            
-                            if top5_customers:
-                                response = "Here are the top 5 customers by total spending:\n\n"
-                                for i, cust in enumerate(top5_customers, 1):
-                                    if cust[4]:  # If they have spent money
-                                        response += f"{i}. **{cust[0]} {cust[1]}** - ${cust[4]:,.2f} ({cust[3]} orders)\n"
-                                    else:
-                                        response += f"{i}. **{cust[0]} {cust[1]}** - No orders yet\n"
-                                
-                                return {
-                                    'success': True,
-                                    'query': query,
-                                    'response': response,
-                                    'sql_generated': False,
-                                    'fallback': True
-                                }
+                    with engine.connect() as conn:
+                        result = conn.execute(text("""
+                            SELECT c.first_name, c.last_name, c.email, COUNT(o.id) as order_count, SUM(o.total) as total_spent
+                            FROM customers c
+                            LEFT JOIN orders o ON c.id = o.customer_id
+                            GROUP BY c.id, c.first_name, c.last_name, c.email
+                            ORDER BY total_spent DESC NULLS LAST, order_count DESC NULLS LAST
+                            LIMIT 1
+                        """))
+                        customer = result.fetchone()
                         
-                        # Default to top customer
-                        return {
-                            'success': True,
-                            'query': query,
-                            'response': f"The top customer is {customer[0]} {customer[1]} ({customer[2]}) with ${customer[4]:,.2f} total spent across {customer[3]} orders.",
-                            'sql_generated': False,
-                            'fallback': True
-                        }
-                    else:
-                        return {
-                            'success': True,
-                            'query': query,
-                            'response': "No order data available to determine the top customer.",
-                            'sql_generated': False,
-                            'fallback': True
-                        }
+                        if customer and customer[4]:  # If there are orders
+                            # Check if this is specifically asking for top 5 customers
+                            if "top 5" in query_lower or "5 customers" in query_lower:
+                                # Get top 5 customers
+                                result_top5 = conn.execute(text("""
+                                    SELECT c.first_name, c.last_name, c.email, COUNT(o.id) as order_count, SUM(o.total) as total_spent
+                                    FROM customers c
+                                    LEFT JOIN orders o ON c.id = o.customer_id
+                                    GROUP BY c.id, c.first_name, c.last_name, c.email
+                                    ORDER BY total_spent DESC NULLS LAST, order_count DESC NULLS LAST
+                                    LIMIT 5
+                                """))
+                                top5_customers = result_top5.fetchall()
+                                
+                                if top5_customers:
+                                    response = "Here are the top 5 customers by total spending:\n\n"
+                                    for i, cust in enumerate(top5_customers, 1):
+                                        if cust[4]:  # If they have spent money
+                                            response += f"{i}. **{cust[0]} {cust[1]}** - ${cust[4]:,.2f} ({cust[3]} orders)\n"
+                                        else:
+                                            response += f"{i}. **{cust[0]} {cust[1]}** - No orders yet\n"
+                                    
+                                    return {
+                                        'success': True,
+                                        'query': query,
+                                        'response': response,
+                                        'sql_generated': False,
+                                        'fallback': True
+                                    }
+                            
+                            # Default to top customer
+                            return {
+                                'success': True,
+                                'query': query,
+                                'response': f"The top customer is {customer[0]} {customer[1]} ({customer[2]}) with ${customer[4]:,.2f} total spent across {customer[3]} orders.",
+                                'sql_generated': False,
+                                'fallback': True
+                            }
+                        else:
+                            return {
+                                'success': True,
+                                'query': query,
+                                'response': "No order data available to determine the top customer.",
+                                'sql_generated': False,
+                                'fallback': True
+                    }
             
             # Largest order queries
             elif any(phrase in query_lower for phrase in ["largest order", "biggest order", "highest order", "order with highest total", "most expensive order"]):

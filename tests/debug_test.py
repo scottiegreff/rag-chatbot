@@ -16,7 +16,7 @@ def test_chat():
     
     try:
         response = requests.post(
-            "http://localhost:8010/api/chat/stream",
+            "http://localhost:8000/api/chat/stream",
             json={"message": "What is the capital of France?", "session_id": "debug-test"},
             timeout=30,
             stream=True

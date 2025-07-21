@@ -40,8 +40,8 @@ docker-compose --env-file env.m1-mac up --build
 ```
 
 **Access your app:**
-- Web UI: http://localhost:8010
-- API: http://localhost:8010/api
+- Web UI: http://localhost:8000
+- API: http://localhost:8000/api
 
 ### 2. Cloud Production
 
@@ -219,7 +219,7 @@ docker-compose logs --tail=100 backend
 docker-compose ps
 
 # Test API endpoint
-curl http://localhost:8010/test
+curl http://localhost:8000/test
 
 # Check database connection
 docker exec ai-chatbot-postgres pg_isready -U postgres
@@ -262,11 +262,11 @@ MEMORY_LIMIT=8G
 **3. Port Conflicts**
 ```bash
 # Check port usage
-lsof -i :8010
+lsof -i :8000
 lsof -i :5432
 
 # Use different ports
-docker-compose up -p 8010  # Use port 8000instead
+docker-compose up -p 8000  # Use port 8000instead
 ```
 
 **4. Permission Issues**
@@ -325,7 +325,7 @@ docker network create ai-internal
 
 # Expose only necessary ports
 ports:
-  - "8010:8010"  # API only
+  - "8000:8000"  # API only
 ```
 
 ## Backup and Recovery

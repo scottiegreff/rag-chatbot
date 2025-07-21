@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "jest",
-    "start": "python -m http.server 8010"
+    "start": "python -m http.server 8000"
   },
   "keywords": [
     "chatbot",

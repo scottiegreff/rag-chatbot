@@ -18,7 +18,7 @@ def test_fallback_list_products():
         "list our 7 cheapest products"
     ]
     
-    base_url = "http://localhost:8010"
+    base_url = "http://localhost:8000"
     
     for query in test_queries:
         print(f"\n🧪 Testing: '{query}'")

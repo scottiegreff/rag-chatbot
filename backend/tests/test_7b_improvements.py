@@ -7,7 +7,7 @@ import requests
 import time
 from datetime import datetime
 
-BASE_URL = "http://localhost:8010"
+BASE_URL = "http://localhost:8000"
 TIMEOUT = 300  # 5 minutes for 7B model
 
 def test_question(question, session_id, timeout=TIMEOUT):

@@ -41,7 +41,7 @@ pkill -f "uvicorn backend.main:app"
   ```
 
 ### Docker Environment (CPU)
-- **Backend**: Docker container on port 8010
+- **Backend**: Docker container on port 8000
 - **Weaviate**: Docker container on port 8080
 - **Database**: PostgreSQL in Docker on port 5432
 - **GPU**: CPU only (no Metal acceleration)
@@ -56,7 +56,7 @@ pkill -f "uvicorn backend.main:app"
 curl -s http://localhost:8000/test
 
 # Docker environment
-curl -s http://localhost:8010/test
+curl -s http://localhost:8000/test
 ```
 
 ### RAG Test

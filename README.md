@@ -15,26 +15,69 @@ A FastAPI-based chatbot with RAG (Retrieval-Augmented Generation) capabilities, 
 - **RESTful API**: Clean, documented API endpoints
 - **Streaming Responses**: Real-time chat responses
 - **Session Management**: Persistent chat sessions with titles
-
-## Project Structure
-
-```
-ai-chatbot/
-├── backend/                 # FastAPI backend application
-│   ├── models/             # Database models
-│   ├── routes/             # API endpoints
-│   ├── services/           # Business logic
-│   └── utils/              # Utility functions
-├── frontend/               # HTML/JS frontend
-├── models/                 # LLM model files
-├── tests/                  # Test files
-├── docker-compose.yml      # Docker orchestration
-├── Dockerfile.backend      # Backend container
-├── Dockerfile.frontend     # Frontend container
-└── requirements.txt        # Python dependencies
-```
+- **URL Validation**: Automatic checking of LLM-provided links for 404s and broken links
 
 ## Quick Start
+
+### How to Start the App
+
+**Activate your virtual environment:**
+```bash
+source venv/bin/activate
+```
+
+**Start the backend (from project root):**
+```bash
+uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+- The `--reload` flag is for development (auto-reloads on code changes).
+- If you see `ModuleNotFoundError: No module named 'backend'`, make sure you are running from the project root, not the backend directory.
+- If you must run from inside `backend/`, use:
+  ```bash
+  PYTHONPATH=.. uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+  ```
+
+**Access the frontend:**
+- Open your browser to: [http://localhost:8000/](http://localhost:8000/)
+
+**(Optional) Start with Docker Compose:**
+```bash
+docker-compose up
+```
+
+---
+
+## URL Validation for LLM Links
+
+This app automatically checks all URLs provided by the LLM in chat responses to ensure they are valid and not 404 (broken) links.
+
+- **How it works:**
+  - Every time the LLM provides a link, the frontend sends it to the backend for validation.
+  - The backend checks the link (using a real HTTP HEAD request) and returns whether it is valid (not 404, not timeout).
+  - The frontend displays a visual indicator next to each link:
+    - ✅ Green checkmark: Link is valid and reachable
+    - ❌ Red X: Link is broken, 404, or unreachable
+  - Hover over the indicator for more details.
+
+- **Manual API usage:**
+  - Validate a single URL:
+    ```bash
+    curl -X POST "http://localhost:8000/api/validate-url" \
+      -H "Content-Type: application/json" \
+      -d '{"url": "https://example.com", "timeout": 5000}'
+    ```
+  - Validate multiple URLs:
+    ```bash
+    curl -X POST "http://localhost:8000/api/validate-urls-batch" \
+      -H "Content-Type: application/json" \
+      -d '["https://example.com", "https://nonexistent.com"]'
+    ```
+
+- **Frontend usage:**
+  - Just use the chat as normal. Any links in LLM responses will be checked and marked automatically.
+
+---
 
 ### Prerequisites
 
@@ -86,12 +129,12 @@ conda activate ai-chatbot
 6. **Start the backend:**
    ```bash
    cd backend
-   PYTHONPATH=.. python -m uvicorn main:app --reload --host 0.0.0.0 --port 8010
+   PYTHONPATH=.. python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
    ```
 
 7. **Access the application:**
-   - Web UI: http://localhost:8010/
-   - API Documentation: http://localhost:8010/docs
+   - Web UI: http://localhost:8000/
+   - API Documentation: http://localhost:8000/docs
 
 ### Manual Setup
 
@@ -113,7 +156,7 @@ conda activate ai-chatbot
 4. **Run the application:**
    ```bash
    cd backend
-   PYTHONPATH=.. python -m uvicorn main:app --reload --host 0.0.0.0 --port 8010
+   PYTHONPATH=.. python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
    ```
 
 ## Configuration
@@ -229,14 +272,14 @@ pip install psycopg2-binary
 
 # Start backend with correct Python path
 cd backend
-PYTHONPATH=.. python -m uvicorn main:app --reload --host 0.0.0.0 --port 8010
+PYTHONPATH=.. python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ## Example Usage
 
 ### Upload a Document
 ```bash
-curl -X POST http://localhost:8010/api/upload \
+curl -X POST http://localhost:8000/api/upload \
   -F "file=@document.pdf" \
   -F "title=Company Policy" \
   -F "category=Human Resources" \
@@ -247,14 +290,14 @@ curl -X POST http://localhost:8010/api/upload \
 
 ### Chat with RAG Context
 ```bash
-curl -X POST http://localhost:8010/api/chat/stream \
+curl -X POST http://localhost:8000/api/chat/stream \
   -H "Content-Type: application/json" \
   -d '{"message": "What are the company policies regarding vacation time?"}'
 ```
 
 ### Get Available Categories
 ```bash
-curl http://localhost:8010/api/categories
+curl http://localhost:8000/api/categories
 ```
 
 ## Development

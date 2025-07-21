@@ -70,7 +70,7 @@ start_prod() {
     echo ""
     echo "✅ Production environment started!"
     echo "   Frontend: http://localhost:3000"
-    echo "   Backend API: http://localhost:8010"
+    echo "   Backend API: http://localhost:8000"
     echo "   Database: localhost:5432"
     echo ""
     echo "To view logs: $0 logs"
