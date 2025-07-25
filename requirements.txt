@@ -38,4 +38,5 @@ aiofiles>=0.7.0
 numpy<2.0
 pandas<2.0
 # Remove scikit-learn if not needed for your use case
-# scikit-learn<2.0 
+# scikit-learn<2.0 openai
+openai

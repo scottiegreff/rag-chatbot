@@ -1,0 +1,43 @@
+Cody and Scott: Coding Adventures at FCIAS 
+ An Epic Tech Saga 
+
+At FCIAS, a mysterious tech company buried deep beneath the snow-capped peaks of 
+Vancouver’s digital skyline, two developers emerged as legends: Cody, the backend warlock 
+who spoke fluent Kubernetes, and Scott, the frontend rogue with lightning-fast fingers and an 
+eye for elegance in even the darkest corners of CSS. 
+
+Their mission? To defend FCIAS from code corruption, server collapse, and the ancient bugs 
+that lurked in legacy systems untouched since the early 2000s. 
+
+One Monday morning (during a coffee shortage, no less), the sky turned red—an error 
+cascade in production had triggered alarms across five continents. Cody slammed his mug 
+down, muttered an arcane command in Terraform, and summoned a fresh VCN with mystical 
+firewalls. Scott, meanwhile, dove into a React codebase written entirely in Comic Sans and 
+inline styles. The horror. The heroism. 
+
+When an AI model trained on FCIAS' internal documents began generating invoices for 
+extinct dinosaurs, Cody and Scott knew it was time to upgrade. They harnessed the power 
+of Retrieval-Augmented Generation, binding a vector database to a knowledge graph 
+encoded in pure RDF, written under a blood moon. Compliance officers wept with joy. 
+
+To test the chatbot’s knowledge, Scott asked, “What is love?” The AI replied, “Baby, don’t 
+hurt me. Don’t hurt me. No more.” It passed. 
+
+Between serverless rituals and Git rebirth ceremonies, they hiked into the cloud 
+(literally—they reached Layer 7), only to find a cluster of corrupted pods guarded by a rogue 
+script written in COBOL. They faced it together. Cody cast a recursive rollback. Scott 
+hotfixed mid-air. Victory. 
+
+On weekends, they held code duels in dimly-lit Vim arenas, debated GraphQL versus REST 
+with the intensity of ancient philosophers, and rode segways through the datacenter while 
+singing shanties about memory leaks and missing semicolons. 
+
+Some say they’re still out there—optimizing queries, chasing that elusive 100% Lighthouse 
+score, and preparing for the next zero-day exploit from beyond the firewall. 
+
+Their tale is whispered in merge requests and carved into the commit history of FCIAS. 
+
+This was not a job. This was destiny. 
+
+ 
+

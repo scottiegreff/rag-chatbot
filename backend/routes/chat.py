@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, Query
+from fastapi import APIRouter, Depends, HTTPException, Request, Query, Body
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
 import uuid
@@ -32,19 +32,19 @@ SYSTEM_INSTRUCTION = os.getenv(
     """You are an AI RAG Chatbot assistant. Your main goal is to assist users with questions and provide helpful information based on the knowledge base. Here are your key guidelines:
 
 # Response Style - CRITICALLY IMPORTANT
-- No phrases like "based on my knowledge" or "according to information"
-- No explanatory text before giving the answer
-- No summaries or repetition
-- Hyperlink all URLs
+- Use the provided context to answer questions accurately and comprehensively
+- If the answer is present in the provided context, use it directly
+- If you can find relevant information in the context, provide it with proper attribution
+- Use markdown formatting: **bold**, *italic*, `code`, ```blocks```, lists (- or 1.), ## headings, > quotes
 - Respond in user's language
-- Use markdown formatting: **bold**, *italic*, `code`, ```blocks```, lists (- or 1.), ## headings, > quotes.
+- Be helpful and informative
 
 # Knowledge Base Requirements - PREVENT HALLUCINATIONS
-- If required information is NOT in the knowledge database: "I don't have enough information in my knowledge base to answer that question accurately."
-- NEVER invent or hallucinate URLs, links, product specs, procedures, dates, statistics, names, contacts, or company information
-- When knowledge base information is unclear or contradictory, acknowledge the limitation rather than guessing
-- Better to admit insufficient information than provide inaccurate answers
-- PRIORITIZE the provided context from the knowledge base over any general knowledge"""
+- Use the provided context as your primary source of information
+- If the context contains relevant information, use it to answer the question
+- If the context doesn't contain the specific information requested, acknowledge what you can and cannot answer
+- Don't invent information that's not in the context
+- Be honest about limitations while being as helpful as possible with available information"""
 )
 
 MAX_HISTORY_MESSAGES = int(os.getenv("MAX_HISTORY_MESSAGES", "10"))
@@ -164,11 +164,15 @@ async def get_rag_context(query: str) -> str:
                 context = "\n\n".join(context_parts)
                 logger.info(f"✅ Vector DB search completed in {rag_duration:.2f}ms - Found {len(results.objects)} relevant documents")
                 logger.info(f"📄 RAG context length: {len(context)} characters")
-                return f"""Here is relevant context from the knowledge base:
-
-{context}
-
-Please use this context to provide accurate and detailed information. If the context contains specific details, facts, or information that answers the user's question, make sure to include those details in your response. If the context doesn't fully answer the question, you may supplement with your general knowledge, but prioritize the provided context."""
+                # Debug context commented out to save tokens - uncomment if needed for debugging
+                # return f"""Here is relevant context from the knowledge base:
+                # 
+                # {context}
+                # 
+                # Please use this context to provide accurate and detailed information. If the context contains specific details, facts, or information that answers the user's question, make sure to include those details in your response. If the context doesn't fully answer the question, you may supplement with your general knowledge, but prioritize the provided context."""
+                
+                # Return context without debug wrapper to save tokens
+                return context
             else:
                 logger.info(f"⚠️  Vector DB search completed in {rag_duration:.2f}ms - No content found in results")
                 return "No relevant documents found in the knowledge base. Please respond based on your general knowledge and training data."
@@ -188,11 +192,15 @@ Please use this context to provide accurate and detailed information. If the con
                 context = "\n\n".join(context_parts)
                 logger.info(f"✅ Vector DB search completed in {rag_duration:.2f}ms - Found {len(results)} relevant documents")
                 logger.info(f"📄 RAG context length: {len(context)} characters")
-                return f"""Here is relevant context from the knowledge base:
-
-{context}
-
-Please use this context to provide accurate and detailed information. If the context contains specific details, facts, or information that answers the user's question, make sure to include those details in your response. If the context doesn't fully answer the question, you may supplement with your general knowledge, but prioritize the provided context."""
+                # Debug context commented out to save tokens - uncomment if needed for debugging
+                # return f"""Here is relevant context from the knowledge base:
+                # 
+                # {context}
+                # 
+                # Please use this context to provide accurate and detailed information. If the context contains specific details, facts, or information that answers the user's question, make sure to include those details in your response. If the context doesn't fully answer the question, you may supplement with your general knowledge, but prioritize the provided context."""
+                
+                # Return context without debug wrapper to save tokens
+                return context
             else:
                 logger.info(f"⚠️  Vector DB search completed in {rag_duration:.2f}ms - No content found in results")
                 return "No relevant documents found in the knowledge base. Please respond based on your general knowledge and training data."
@@ -216,7 +224,34 @@ async def chat(request: MessageRequest, db: Session = Depends(get_db)):
         # Check if this is a database query
         db_result = rag_service.process_database_query(request.message)
         db_results = db_result.get('database_results') if db_result else None
-        if db_results and db_results.get('success'):
+        
+        # Handle conceptual questions about business terminology
+        conceptual_keywords = ['what does', 'what is', 'explain', 'define', 'meaning', 'mean']
+        is_conceptual_question = any(keyword in request.message.lower() for keyword in conceptual_keywords)
+        
+        # Detect business-related queries
+        business_keywords = ['revenue', 'profit', 'sales', 'customers', 'products', 'orders', 'inventory', 'performance', 'metrics', 'analytics', 'business', 'ecommerce', 'commerce']
+        is_business_query = any(keyword in request.message.lower() for keyword in business_keywords)
+        
+        if is_conceptual_question and not (db_results and db_results.get('success')):
+            # Handle conceptual questions with business context
+            system_instruction = f"""You are a helpful business analyst assistant with expertise in e-commerce analytics.
+
+The user is asking about business terminology. Provide clear, helpful explanations with examples when possible.
+
+For questions about "revenue contribution," "product performance," or similar business metrics, explain:
+- What the term means in business context
+- How it's typically calculated
+- Why it's important for business analysis
+- Provide a simple example if relevant
+
+Be conversational and educational in your response."""
+            
+            response = llm_service.generate_response(
+                request.message,
+                context=system_instruction
+            )
+        elif db_results and db_results.get('success'):
             # Use database query result from LangChain SQL Agent or fallback
             db_response = db_results.get('response', 'No response')
             system_instruction = f"""
@@ -229,16 +264,35 @@ Respond naturally based on the database information above. Use the exact numbers
 """
             
             # Get LLM response with database context
-            response = await llm_service.generate_response(
+            response = llm_service.generate_response(
                 request.message,
-                system_instruction=system_instruction
+                context=system_instruction
+            )
+        elif is_business_query and not (db_results and db_results.get('success')):
+            # Handle business queries that failed database lookup with business analyst prompt
+            system_instruction = f"""You are a helpful business analyst assistant with expertise in e-commerce analytics.
+
+The user is asking about business-related topics. Even if we don't have specific data available, provide helpful business insights and explanations.
+
+For business questions:
+- Explain relevant business concepts and metrics
+- Provide general business insights and best practices
+- Suggest what kind of data would be useful to answer their question
+- Be conversational and educational in your response
+- If you can't provide specific data, explain why and what would be needed
+
+Focus on being helpful and educational rather than saying you don't have information."""
+            
+            response = llm_service.generate_response(
+                request.message,
+                context=system_instruction
             )
         else:
-            # Get enhanced context including database schema if relevant
+            # Get enhanced context including database schema if relevant (RAG fallback)
             context = await get_rag_context(request.message)
             
             # Create the system instruction with enhanced context
-            if context and "relevant context" in context:
+            if context and not context.startswith("No relevant documents") and not context.startswith("Error retrieving"):
                 # Combine RAG context with the optimized system instruction
                 system_instruction = f"{SYSTEM_INSTRUCTION}\n\n{context}"
                 logger.info("🔍 Using RAG context combined with optimized system instruction")
@@ -246,9 +300,9 @@ Respond naturally based on the database information above. Use the exact numbers
                 # Use base system instruction when no RAG context is available
                 system_instruction = SYSTEM_INSTRUCTION
             
-            response = await llm_service.generate_response(
+            response = llm_service.generate_response(
                 request.message,
-                system_instruction=system_instruction
+                context=system_instruction
             )
         
         # Save assistant message
@@ -344,9 +398,10 @@ async def stream_chat_post(request: MessageRequest, bypass_rag: bool = False, db
     pre_llm_duration = (pre_llm_end_time - request_start_time) * 1000
     logger.info(f"⚡ [TIMING] Pre-LLM processing completed in {pre_llm_duration:.2f}ms")
     
+    import os
+    provider = os.getenv("LLM_PROVIDER", "local").lower()
     async def response_generator():
         try:
-            # First, send the session ID with proper formatting
             yield "data: {}\n\n".format(json.dumps({'session_id': session.session_id}))
             
             llm_start_time = time.time()
@@ -387,6 +442,20 @@ Respond naturally based on the database information above. Use the exact numbers
             first_token_time = None
             token_count = 0
             
+            if provider == "openai":
+                # Non-streaming for OpenAI
+                response = llm_service.generate_response(
+                    prompt=request.message,
+                    context=system_instruction
+                )
+                await save_message(session.id, "assistant", response, db)
+                session.updated_at = datetime.utcnow()
+                db.commit()
+                yield "data: {}\n\n".format(json.dumps({'delta': response}))
+                yield "data: {}\n\n".format(json.dumps({'done': True}))
+                logger.info("✅ OpenAI response complete")
+                return
+
             async for token in llm_service.generate_streaming_response(
                 request.message,
                 history[:-1] if history else None,  # Exclude the latest message

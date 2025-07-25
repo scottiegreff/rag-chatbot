@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from datetime import datetime
 import time
 import threading
+import openai
 
 # Load environment variables
 load_dotenv()
@@ -13,333 +14,64 @@ load_dotenv()
 # Set up logging
 logger = logging.getLogger(__name__)
 
-# Global singleton instance
-_llm_service_instance = None
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "local").lower()
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4")
 
 class LLMService:
-    """Service for interacting with the LLM model using ctransformers"""
-    
+    """Service for interacting with the LLM model using ctransformers or OpenAI"""
+    _instance = None
+
     def __new__(cls):
-        global _llm_service_instance
-        if _llm_service_instance is None:
+        if cls._instance is None:
             logger.info("🆕 Creating new LLMService instance (singleton)")
-            _llm_service_instance = super(LLMService, cls).__new__(cls)
+            cls._instance = super(LLMService, cls).__new__(cls)
         else:
             logger.info("♻️  Reusing existing LLMService instance (singleton)")
-        return _llm_service_instance
-    
+        return cls._instance
+
     def __init__(self):
-        # Only initialize if not already initialized
-        if hasattr(self, 'model'):
+        if hasattr(self, '_initialized') and self._initialized:
             logger.info("🔄 LLMService already initialized, skipping...")
             return
-            
-        self.model = None
-        # Model configuration
-        self.model_type = os.getenv("MODEL_TYPE", "llama")
-        self.gpu_layers = int(os.getenv("GPU_LAYERS", "50"))
-        self.context_length = int(os.getenv("CONTEXT_LENGTH", "4096"))
-        self.model_path = os.getenv("MODEL_PATH", "models/mistral-7b-instruct-v0.2.Q4_K_M.gguf")
-        
-        # Generation parameters
-        self.max_new_tokens = int(os.getenv("MAX_NEW_TOKENS", "512"))
-        self.temperature = float(os.getenv("TEMPERATURE", "0.7"))
-        self.top_p = float(os.getenv("TOP_P", "0.85"))
-        self.repetition_penalty = float(os.getenv("REPETITION_PENALTY", "1.1"))
-        
-        logger.info(
-            f"LLMService initialized with model_type={self.model_type}, "
-            f"gpu_layers={self.gpu_layers}, context_length={self.context_length}, "
-            f"max_new_tokens={self.max_new_tokens}, temperature={self.temperature}, "
-            f"top_p={self.top_p}, repetition_penalty={self.repetition_penalty}"
-        )
-        self._load_model()
-    
-    def _load_model(self):
-        """Load the language model using llama-cpp-python"""
-        try:
-            from llama_cpp import Llama
-            
-            logger.info("🔄 Loading language model... (this might take a minute)")
-            load_start_time = time.time()
-            
-            # Project root directory
-            project_root = Path(__file__).parent.parent.parent
-            logger.info(f"📁 Project root: {project_root}")
-            
-            # Get model configuration from environment variables
-            model_path = project_root / self.model_path
-            logger.info(f"🔍 Looking for model at: {model_path}")
-            
-            # Check if model exists
-            if not model_path.exists():
-                logger.error(f"❌ Model not found at {model_path}. Please download a model first.")
-                return
-            
-            logger.info("✅ Model file found, attempting to load...")
-            
-            # Initialize the model with llama-cpp-python
-            model_init_start_time = time.time()
-            self.model = Llama(
-                model_path=str(model_path),
-                n_ctx=self.context_length,
-                n_gpu_layers=self.gpu_layers,
-                verbose=False
-            )
-            model_init_end_time = time.time()
-            model_init_duration = (model_init_end_time - model_init_start_time) * 1000
-            logger.info(f"🤖 [TIMING] Model initialization completed in {model_init_duration:.2f}ms")
-            
-            load_end_time = time.time()
-            load_duration = (load_end_time - load_start_time) * 1000
-            logger.info(f"🎉 [TIMING] Model loaded successfully in {load_duration:.2f}ms!")
-            logger.info(f"📊 Model type: {self.model_type}, GPU layers: {self.gpu_layers}, Context length: {self.context_length}")
-            logger.info(f"[DIAGNOSTIC] CT_METAL={os.getenv('CT_METAL')}, CT_CUDA={os.getenv('CT_CUDA')}, GPU_LAYERS={self.gpu_layers}")
-            logger.info("[DIAGNOSTIC] Note: This does not guarantee GPU/Metal is actually being used inside Docker on Mac.")
-            
-        except Exception as e:
-            load_end_time = time.time()
-            load_duration = (load_end_time - load_start_time) * 1000
-            logger.error(f"❌ [TIMING] Model loading failed after {load_duration:.2f}ms: {e}")
-            import traceback
-            logger.error(f"🔍 Full traceback: {traceback.format_exc()}")
-    
-    def _prepare_prompt(self, message: str, history: Optional[List[Dict[str, str]]] = None, system_instruction: Optional[str] = None) -> str:
-        """Prepare the prompt for the model with conversation history and system instruction"""
-        # Check if Chain of Thought reasoning should be used
-        use_cot = self._should_use_chain_of_thought(message)
-        
-        if use_cot:
-            logger.info("🧠 Chain of Thought reasoning detected - enhancing prompt")
-            message = self._add_chain_of_thought_prompt(message)
-        
-        # For Mistral 7B Instruct, use the [INST] format
-        if self.model_path and "mistral" in str(self.model_path).lower():
-            # Mistral 7B Instruct format
-            if system_instruction:
-                prompt = f"<s>[INST] {system_instruction}\n\n{message} [/INST]"
-            else:
-                prompt = f"<s>[INST] {message} [/INST]"
+        logger.info(f"🔧 LLMService initializing with provider: {LLM_PROVIDER}")
+        self.provider = LLM_PROVIDER
+        if self.provider == "openai":
+            if not OPENAI_API_KEY:
+                logger.error("OPENAI_API_KEY is not set in .env!")
+                raise ValueError("OPENAI_API_KEY is required for OpenAI provider.")
+            openai.api_key = OPENAI_API_KEY
+            logger.info(f"✅ Using OpenAI model: {OPENAI_MODEL}")
+        elif self.provider == "local":
+            # Place your local model initialization here if needed
+            logger.info("✅ Using local LLM model (not OpenAI)")
         else:
-            # Default format for other models (like TinyLlama)
-            if system_instruction:
-                prompt = f"{system_instruction}\n\n"
-            else:
-                prompt = ""
-            prompt += f"User: {message}\nAssistant:"
-        
-        return prompt
+            logger.error(f"Unknown LLM_PROVIDER: {self.provider}")
+            raise ValueError(f"Unknown LLM_PROVIDER: {self.provider}")
+        self._initialized = True
 
-    async def generate_streaming_response(
-        self,
-        message: str,
-        history: Optional[List[Dict[str, str]]] = None,
-        system_instruction: Optional[str] = None
-    ) -> AsyncGenerator[str, None]:
-        """Generate a streaming response from the model"""
-        try:
-            if not self.model:
-                raise RuntimeError("Model not loaded. Please load the model first.")
-            
-            prompt = self._prepare_prompt(message, history, system_instruction)
-            logger.info(f"📄 Prompt length: {len(prompt)} characters")
-            
-            # Generate response with error handling
+    def generate_response(self, prompt, context=None, **kwargs):
+        logger.info(f"[LLMService] Generating response with provider: {self.provider}")
+        if self.provider == "openai":
+            # Use OpenAI v1.x API (see: https://github.com/openai/openai-python/discussions/742)
+            messages = []
+            if context:
+                messages.append({"role": "system", "content": context})
+            messages.append({"role": "user", "content": prompt})
             try:
-                response = self.model.create_completion(
-                    prompt,
-                    max_tokens=self.max_new_tokens,
-                    temperature=self.temperature,
-                    top_p=self.top_p,
-                    repeat_penalty=self.repetition_penalty,
-                    stop=["[INST]", "</s>", "<|endoftext|>", "User:", "Assistant:", "\n\nUser:", "\n\nAssistant:"],
-                    stream=True
+                response = openai.chat.completions.create(
+                    model=OPENAI_MODEL,
+                    messages=messages,
+                    temperature=0.2,
+                    max_tokens=1024,
                 )
-                
-                token_count = 0
-                for chunk in response:
-                    if isinstance(chunk, dict) and 'choices' in chunk and chunk['choices']:
-                        token = chunk['choices'][0]['text']
-                        if token:
-                            token_count += 1
-                            yield token
-                    elif chunk and hasattr(chunk, 'choices') and chunk.choices:
-                        token = chunk.choices[0].text
-                        if token:
-                            token_count += 1
-                            yield token
-                
-                logger.info(f"📊 Generated {token_count} tokens")
-                
+                return "[OPENAI] " + response.choices[0].message.content.strip()
             except Exception as e:
-                logger.error(f"❌ Model generation failed: {str(e)}", exc_info=True)
-                yield f"\n\nError: {str(e)}"
-                return
-            
-        except Exception as e:
-            logger.error(f"❌ Streaming response generation failed: {str(e)}", exc_info=True)
-            yield f"\n\nError: {str(e)}"
-            return
-
-    async def generate_response(
-        self,
-        message: str,
-        history: Optional[List[Dict[str, str]]] = None,
-        system_instruction: Optional[str] = None
-    ) -> str:
-        """Generate a non-streaming response from the model"""
-        try:
-            if not self.model:
-                raise RuntimeError("Model not loaded. Please load the model first.")
-            
-            prompt = self._prepare_prompt(message, history, system_instruction)
-            logger.info(f"📄 Prompt length: {len(prompt)} characters")
-            
-            # Generate response with error handling
-            try:
-                response = self.model.create_completion(
-                    prompt,
-                    max_tokens=self.max_new_tokens,
-                    temperature=self.temperature,
-                    top_p=self.top_p,
-                    repeat_penalty=self.repetition_penalty,
-                    stop=["[INST]", "</s>", "<|endoftext|>", "User:", "Assistant:", "\n\nUser:", "\n\nAssistant:"]
-                )
-                
-                # Extract the response text from the completion object
-                if isinstance(response, dict) and 'choices' in response and response['choices']:
-                    response_text = response['choices'][0]['text']
-                elif hasattr(response, 'choices') and response.choices:
-                    response_text = response.choices[0].text
-                else:
-                    response_text = str(response) if response else ""
-                
-                # Clean up the response - remove any unwanted text that might have been generated
-                response_text = self._clean_response(response_text)
-                
-                logger.info(f"📊 Response length: {len(response_text)} characters")
-                return response_text
-                
-            except Exception as e:
-                logger.error(f"Error during model generation: {str(e)}", exc_info=True)
-                return f"Error: {str(e)}"
-            
-        except Exception as e:
-            logger.error(f"Error in generate_response: {str(e)}", exc_info=True)
-            return f"Error: {str(e)}"
-
-    def _clean_response(self, response_text: str) -> str:
-        """Clean up the response by removing unwanted text patterns"""
-        # Remove implementation suggestions
-        unwanted_patterns = [
-            "Implementing this functionality",
-            "This functionality",
-            "This will help",
-            "This improves"
-        ]
-        
-        for pattern in unwanted_patterns:
-            if pattern in response_text:
-                response_text = response_text.split(pattern)[0].strip()
-        
-        # Clean up fake conversations - remove any text that looks like the model is pretending to be a user
-        user_patterns = [
-            "User: Do you",
-            "User: Can you", 
-            "User: What",
-            "User: How",
-            "User: When",
-            "User: Where",
-            "User: Why",
-            "User: Which"
-        ]
-        
-        for pattern in user_patterns:
-            if pattern in response_text:
-                response_text = response_text.split(pattern)[0].strip()
-        
-        # Remove any trailing "Assistant:" that might have been generated
-        if response_text.endswith("Assistant:"):
-            response_text = response_text[:-11].strip()
-        
-        return response_text
-
-    def _should_use_chain_of_thought(self, message: str) -> bool:
-        """
-        Determine if Chain of Thought reasoning would be beneficial for this query.
-        
-        Args:
-            message: User's message
-            
-        Returns:
-            True if CoT should be used, False otherwise
-        """
-        message_lower = message.lower()
-        
-        # Mathematical problems - more specific indicators
-        math_indicators = [
-            'calculate', 'solve', 'compute', 'determine',
-            'how much', 'total', 'sum', 'average', 'percentage',
-            'if', 'then', 'equals', 'plus', 'minus', 'times', 'divided by',
-            'multiply', 'divide', 'add', 'subtract', 'equation'
-        ]
-        
-        # Logical reasoning problems
-        logic_indicators = [
-            'if all', 'can we conclude', 'logical', 'reasoning',
-            'sequence', 'pattern', 'next in', 'follows', 'therefore',
-            'because', 'since', 'implies', 'contradicts'
-        ]
-        
-        # Programming problems
-        programming_indicators = [
-            'write a function', 'create a program', 'algorithm',
-            'debug', 'optimize', 'implement', 'design', 'architecture'
-        ]
-        
-        # Complex multi-step problems
-        complexity_indicators = [
-            'step by step', 'explain how', 'show your work',
-            'break down', 'analyze', 'compare', 'evaluate'
-        ]
-        
-        # Check if any indicators are present
-        has_math = any(indicator in message_lower for indicator in math_indicators)
-        has_logic = any(indicator in message_lower for indicator in logic_indicators)
-        has_programming = any(indicator in message_lower for indicator in programming_indicators)
-        has_complexity = any(indicator in message_lower for indicator in complexity_indicators)
-        
-        # Additional check: don't use CoT for simple factual questions
-        simple_questions = [
-            'what is', 'who is', 'where is', 'when is', 'weather',
-            'temperature', 'time', 'date', 'location', 'address'
-        ]
-        is_simple_question = any(indicator in message_lower for indicator in simple_questions)
-        
-        # Only use CoT if it's a complex problem AND not a simple question
-        return (has_math or has_logic or has_programming or has_complexity) and not is_simple_question
-
-    def _add_chain_of_thought_prompt(self, message: str) -> str:
-        """
-        Add Chain of Thought reasoning instructions to the prompt.
-        
-        Args:
-            message: Original user message
-            
-        Returns:
-            Enhanced message with CoT instructions
-        """
-        cot_instruction = """
-IMPORTANT: For this question, please use Chain of Thought reasoning. Think through the problem step-by-step:
-
-1. First, understand what is being asked
-2. Break down the problem into smaller parts
-3. Work through each part logically
-4. Show your reasoning process
-5. Arrive at a conclusion
-
-Let me think through this step by step:
-
-"""
-        
-        return cot_instruction + message
+                logger.error(f"OpenAI API error: {e}")
+                return f"[OpenAI API error: {e}]"
+        elif self.provider == "local":
+            # Place your local model inference code here
+            return "[Local LLM not implemented in this patch]"
+        else:
+            logger.error(f"Unknown LLM_PROVIDER: {self.provider}")
+            raise ValueError(f"Unknown LLM_PROVIDER: {self.provider}")

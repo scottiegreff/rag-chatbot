@@ -15,7 +15,7 @@ import time
 from .search_service import SearchService
 from backend.services.langchain_sql_service import langchain_sql_service
 from weaviate.connect import ConnectionParams
-from weaviate.collections.classes.config import DataType, Property, Vectorizers, Configure
+from weaviate.collections.classes.config import DataType, Property, Vectorizers, Configure, VectorDistances
 from weaviate.collections.classes.filters import Filter
 from weaviate.classes.data import DataObject
 from urllib.parse import urlparse
@@ -159,6 +159,9 @@ class RAGService:
                 name=COLLECTION_NAME,
                 properties=properties,
                 vectorizer_config=Configure.Vectorizer.none(),
+                vector_index_config=Configure.VectorIndex.hnsw(
+                    distance_metric=VectorDistances.COSINE
+                ),
                 description="A collection for storing document chunks with embeddings"
             )
             logger.info(f"✅ Created collection: {COLLECTION_NAME}")
@@ -193,6 +196,7 @@ class RAGService:
                 })
                 # Generate embedding
                 embedding = self.embedding_model.encode(chunk).tolist() if self.embedding_model else None
+                logger.info(f"Generated embedding for chunk {idx}: length={len(embedding) if embedding else 0}")
                 # Format upload_date as RFC3339 with milliseconds and Z
                 upload_date = chunk_metadata.get("upload_date")
                 if not upload_date:

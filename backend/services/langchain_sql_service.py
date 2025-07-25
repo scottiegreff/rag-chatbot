@@ -9,11 +9,11 @@ import signal
 import re
 import time
 from typing import Dict, Any, Optional
-from langchain.agents import create_sql_agent
-from langchain.sql_database import SQLDatabase
-from langchain.agents.agent_toolkits import SQLDatabaseToolkit
+from langchain_community.agent_toolkits.sql.base import create_sql_agent
+from langchain_community.utilities import SQLDatabase
+from langchain_community.agent_toolkits.sql.toolkit import SQLDatabaseToolkit
 from langchain.agents.agent_types import AgentType
-from langchain.callbacks import get_openai_callback
+from langchain_community.callbacks.manager import get_openai_callback
 from langchain.llms.base import LLM
 from langchain_core.language_models.llms import LLMResult
 from sqlalchemy import text
@@ -47,31 +47,17 @@ class LLMServiceWrapper(LLM):
             context_builder = get_sql_context_builder()
             enhanced_prompt = context_builder.build_sql_context(user_query)
             
-            try:
-                loop = asyncio.get_running_loop()
-            except RuntimeError:
-                loop = None
-
-            if loop and loop.is_running():
-                # If there's already a running loop, use asyncio.run_coroutine_threadsafe
-                future = asyncio.run_coroutine_threadsafe(
-                    self.llm_service.generate_response(enhanced_prompt), loop
-                )
-                result = future.result()
-            else:
-                result = asyncio.run(self.llm_service.generate_response(enhanced_prompt))
+            # Call the synchronous method directly since it's not async
+            result = self.llm_service.generate_response(enhanced_prompt)
             
-            # Check if the result is an error message and return a proper SQL agent response
-            if "I apologize" in result or "having trouble" in result or "error" in result.lower():
-                logger.warning(f"LLM returned error message, providing fallback SQL agent response")
-                return self._get_fallback_sql_response(prompt)
-            
-            return result
+            # Format the response properly for LangChain SQL Agent
+            formatted_result = self._format_response_for_langchain(result, prompt)
+            return formatted_result
             
         except Exception as e:
             logger.error(f"Error in LLMServiceWrapper._call: {e}")
-            # Return a proper SQL agent response instead of an error message
-            return self._get_fallback_sql_response(prompt)
+            # Return a properly formatted response for LangChain
+            return self._format_response_for_langchain("I need to use the database tools to answer this question.", prompt)
     
     async def _acall(self, prompt: str, stop: Optional[list] = None, **kwargs) -> str:
         """Async call method for LangChain compatibility"""
@@ -83,19 +69,17 @@ class LLMServiceWrapper(LLM):
             context_builder = get_sql_context_builder()
             enhanced_prompt = context_builder.build_sql_context(user_query)
             
-            result = await self.llm_service.generate_response(enhanced_prompt)
+            # Call the synchronous method directly since it's not async
+            result = self.llm_service.generate_response(enhanced_prompt)
             
-            # Check if the result is an error message and return a proper SQL agent response
-            if "I apologize" in result or "having trouble" in result or "error" in result.lower():
-                logger.warning(f"LLM returned error message, providing fallback SQL agent response")
-                return self._get_fallback_sql_response(prompt)
-            
-            return result
+            # Format the response properly for LangChain SQL Agent
+            formatted_result = self._format_response_for_langchain(result, prompt)
+            return formatted_result
             
         except Exception as e:
             logger.error(f"Error in LLMServiceWrapper._acall: {e}")
-            # Return a proper SQL agent response instead of an error message
-            return self._get_fallback_sql_response(prompt)
+            # Return a properly formatted response for LangChain
+            return self._format_response_for_langchain("I need to use the database tools to answer this question.", prompt)
     
     def _extract_user_query(self, prompt: str) -> str:
         """Extract the user query from the LangChain prompt"""
@@ -116,6 +100,71 @@ class LLMServiceWrapper(LLM):
         # If no pattern matches, return the last line that's not empty
         lines = [line.strip() for line in prompt.split('\n') if line.strip()]
         return lines[-1] if lines else prompt.strip()
+    
+    def _format_response_for_langchain(self, result: str, prompt: str) -> str:
+        """Format the LLM response properly for LangChain SQL Agent"""
+        try:
+            # Remove the [OPENAI] prefix if present
+            if result.startswith("[OPENAI] "):
+                result = result[9:]  # Remove "[OPENAI] " prefix
+            
+            # Remove backticks from SQL queries (PostgreSQL doesn't support them)
+            result = result.replace('`', '')
+            
+            # Clean up SQL formatting - remove extra "sql" text and whitespace
+            if "Action Input:" in result:
+                # Find the Action Input section and clean it up
+                action_input_start = result.find("Action Input:")
+                if action_input_start != -1:
+                    # Get the content after "Action Input:"
+                    action_input_content = result[action_input_start + len("Action Input:"):].strip()
+                    # Remove any "sql" prefix and clean up
+                    if action_input_content.startswith("sql"):
+                        action_input_content = action_input_content[3:].strip()
+                    # Reconstruct the result
+                    result = result[:action_input_start] + "Action Input: " + action_input_content
+            
+            # If the result contains a complete LangChain conversation, extract just the first action
+            if "Action:" in result and "Final Answer:" in result:
+                # Extract just the first action part
+                action_start = result.find("Action:")
+                action_end = result.find("Observation:")
+                if action_end == -1:
+                    action_end = result.find("Thought:")
+                if action_end == -1:
+                    action_end = result.find("Final Answer:")
+                
+                if action_start != -1 and action_end != -1:
+                    return result[action_start:action_end].strip()
+                else:
+                    # If we can't parse it properly, return just the action line
+                    lines = result.split('\n')
+                    for line in lines:
+                        if line.strip().startswith("Action:"):
+                            return line.strip()
+            
+            # If the result contains just an action, return it
+            if "Action:" in result:
+                return result
+            
+            # If this is an initial response, guide the agent to use tools
+            if "Action:" not in prompt and "Observation:" not in prompt:
+                return "I need to use the database tools to answer this question. Let me start by exploring the available tables."
+            
+            # If the model returns raw SQL, format it properly for LangChain
+            if result.strip().startswith("SELECT") or result.strip().startswith("sql"):
+                # Clean up the SQL
+                sql_query = result.strip()
+                if sql_query.startswith("sql"):
+                    sql_query = sql_query[3:].strip()
+                return f"Action: sql_db_query\nAction Input: {sql_query}"
+            
+            # For other cases, return the result as is
+            return result
+            
+        except Exception as e:
+            logger.warning(f"Error formatting response for LangChain: {e}")
+            return result
     
     def _get_fallback_sql_response(self, prompt: str) -> str:
         """Generate a proper SQL agent response when LLM fails"""
@@ -199,16 +248,17 @@ class LangChainSQLService:
             # Create toolkit with the database
             toolkit = SQLDatabaseToolkit(db=self.db, llm=langchain_llm)
             
-            # Create the SQL agent with optimized configuration
+            # Create the SQL agent with optimized configuration for development
             self.agent = create_sql_agent(
                 llm=langchain_llm,
                 toolkit=toolkit,
                 agent_type=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
                 verbose=True,
                 handle_parsing_errors=True,
-                max_iterations=3,  # Reduced from 5 to 3 for faster execution
-                early_stopping_method="generate",
-                return_intermediate_steps=True  # Better debugging
+                max_iterations=5,  # Increased for better reasoning
+                early_stopping_method="force",
+                return_intermediate_steps=True,  # Better debugging
+                max_execution_time=90  # Increased to 90 seconds for complex queries
             )
             
             logger.info("✅ LangChain SQL Agent initialized successfully with optimized configuration")
@@ -264,6 +314,7 @@ class LangChainSQLService:
             
             # Average queries
             "average order", "average order value", "avg order", "mean order",
+            "average price", "avg price", "mean price",
             
             # Product queries
             "list all products", "show all products", "best selling product",
@@ -324,10 +375,10 @@ class LangChainSQLService:
                 logger.info(f"Query '{query}' doesn't appear to be a database query")
                 return None
             
-            # Check if this is a simple query that can use fallback
-            if self.is_simple_query(query):
-                logger.info(f"Using fast fallback for simple query: '{query}'")
-                return self._fallback_query(query)
+            # Disable fallback to force LangChain usage for better AI-powered responses
+            # if self.is_simple_query(query):
+            #     logger.info(f"Using fast fallback for simple query: '{query}'")
+            #     return self._fallback_query(query)
             
             if not self.agent:
                 logger.error("LangChain SQL Agent not initialized")
@@ -342,9 +393,9 @@ class LangChainSQLService:
             def timeout_handler(signum, frame):
                 raise TimeoutError("LangChain SQL Agent timed out")
             
-            # Set timeout to 15 seconds
+            # Set timeout to 45 seconds (increased from 15)
             signal.signal(signal.SIGALRM, timeout_handler)
-            signal.alarm(15)
+            signal.alarm(45)
             
             try:
                 # Use LangChain SQL Agent to process the query
@@ -505,6 +556,19 @@ class LangChainSQLService:
                     'success': True,
                     'query': query,
                     'response': f"The average order value is ${avg:,.2f}.",
+                    'sql_generated': False,
+                    'fallback': True
+                }
+            
+            # Average product price queries
+            elif any(phrase in query_lower for phrase in ["average price", "avg price", "mean price"]) and any(phrase in query_lower for phrase in ["product", "products"]):
+                with engine.connect() as conn:
+                    result = conn.execute(text("SELECT AVG(price) as avg FROM products"))
+                    avg = result.fetchone()[0] or 0
+                return {
+                    'success': True,
+                    'query': query,
+                    'response': f"The average price of all products is ${avg:,.2f}.",
                     'sql_generated': False,
                     'fallback': True
                 }

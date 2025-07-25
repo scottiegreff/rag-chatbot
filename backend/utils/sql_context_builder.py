@@ -216,14 +216,98 @@ WHERE i.quantity = 0;
         self.examples_cache = examples
         return self.examples_cache
     
+    def get_business_rules(self) -> str:
+        """Get business rules and domain knowledge"""
+        rules = """# Business Rules and Domain Knowledge
+
+## E-commerce Business Context
+- This is an e-commerce platform with customers, products, orders, and inventory
+- Orders can have multiple items (order_items table)
+- Products belong to categories and have inventory tracking
+- Customers can have multiple addresses (shipping/billing)
+- Orders have status tracking (pending, shipped, delivered, etc.)
+
+## Key Relationships
+- customers -> orders (one-to-many)
+- orders -> order_items (one-to-many)
+- products -> order_items (one-to-many)
+- products -> inventory (one-to-one)
+- customers -> addresses (one-to-many)
+- products -> categories (many-to-one)
+
+## Business Metrics
+- Revenue = SUM(order_items.quantity * order_items.price)
+- Average Order Value = AVG(orders.total)
+- Customer Lifetime Value = SUM of all orders per customer
+- Product Performance = SUM of quantities sold per product
+
+## Data Quality Rules
+- All prices are stored as NUMERIC(10,2) with 2 decimal places
+- Order totals are calculated from order_items (quantity * price)
+- Customer emails are unique and required
+- Product names and prices are required fields
+- Order dates use TIMESTAMP with timezone awareness
+
+## Common Business Queries
+- Top customers by total spending
+- Best selling products by quantity
+- Revenue by category or time period
+- Inventory levels and low stock alerts
+- Customer order frequency and patterns
+"""
+        return rules
+    
+    def get_data_insights(self) -> str:
+        """Get data insights and common patterns"""
+        insights = """# Data Insights and Query Patterns
+
+## Common Aggregation Patterns
+- Customer analysis: GROUP BY customer_id, customer_name
+- Product analysis: GROUP BY product_id, product_name, category
+- Time-based analysis: GROUP BY DATE_TRUNC('month', created_at)
+- Revenue analysis: SUM(quantity * price) or SUM(total)
+
+## Join Patterns
+- Customer orders: customers JOIN orders ON customer_id
+- Order details: orders JOIN order_items ON order_id
+- Product info: order_items JOIN products ON product_id
+- Category analysis: products JOIN categories ON category_id
+- Inventory check: products JOIN inventory ON product_id
+
+## Filtering Best Practices
+- Active orders: WHERE status != 'cancelled'
+- Recent data: WHERE created_at >= NOW() - INTERVAL '30 days'
+- Valid products: WHERE price > 0 AND name IS NOT NULL
+- Stocked items: WHERE inventory.quantity > 0
+
+## Sorting Patterns
+- Revenue: ORDER BY total_spent DESC
+- Recent activity: ORDER BY created_at DESC
+- Performance: ORDER BY quantity_sold DESC
+- Alphabetical: ORDER BY name ASC
+
+## Common Calculations
+- Percentage: (value / total) * 100
+- Growth rate: ((current - previous) / previous) * 100
+- Running totals: SUM() OVER (ORDER BY date)
+- Rankings: ROW_NUMBER() OVER (ORDER BY value DESC)
+"""
+        return insights
+    
     def build_sql_context(self, query: str) -> str:
         """Build comprehensive SQL context for a query"""
         schema = self.get_database_schema()
         examples = self.get_example_queries()
+        business_rules = self.get_business_rules()
+        data_insights = self.get_data_insights()
         
         context = f"""# SQL Agent Context
 
 {schema}
+
+{business_rules}
+
+{data_insights}
 
 {examples}
 
@@ -231,9 +315,11 @@ WHERE i.quantity = 0;
 {query}
 
 # Instructions
-Based on the schema and examples above, generate the appropriate SQL query to answer the user's question.
-If the query is asking for specific data (like top customers, revenue, etc.), execute the query and return the results.
+Based on the schema, business rules, and examples above, generate the appropriate SQL query to answer the user's question.
+Consider the business context and data relationships when crafting your query.
 Always use proper SQL syntax and join tables when needed to get complete information.
+For aggregations, consider using appropriate functions like SUM(), AVG(), COUNT(), etc.
+When dealing with dates, use proper date functions and consider time zones if relevant.
 """
         
         return context
