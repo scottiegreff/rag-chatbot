@@ -6,55 +6,114 @@ This script checks what documents are currently in the Weaviate vector store.
 """
 
 import os
-import sys
-from pathlib import Path
-import logging
+from dotenv import load_dotenv
+import weaviate
+from weaviate.connect import ConnectionParams
+import re
 
-# Add the backend directory to the Python path
-backend_dir = Path(__file__).parent.parent
-sys.path.insert(0, str(backend_dir))
+load_dotenv()
+WEAVIATE_URL = os.getenv("WEAVIATE_URL", "http://localhost:8080")
+print("WEAVIATE_URL:", WEAVIATE_URL)
 
-from backend.services.rag_service import RAGService
+# Specify grpc_port as required by v4 client
+client = weaviate.WeaviateClient(ConnectionParams.from_url(WEAVIATE_URL, grpc_port=50051))
+client.connect()  # Ensure the client is connected
+print("Collections:", client.collections.list_all())
 
-# Set up logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+def keyword_search(keywords, filename):
+    docs = client.collections.get("Documents")
+    # Fetch up to 500 objects for this test (should be enough for one document)
+    results = docs.query.fetch_objects(limit=500)
+    matches = []
+    for obj in results.objects:
+        props = obj.properties
+        content = props.get("content", "")
+        file = props.get("filename", "")
+        if file == filename:
+            for kw in keywords:
+                if re.search(kw, content, re.IGNORECASE):
+                    matches.append((props.get("chunk_index"), content.strip().replace("\n", " ")))
+                    break
+    return matches
 
-def check_vector_database():
-    """Check the contents of the vector database."""
-    
-    try:
-        # Initialize RAG service
-        rag_service = RAGService()
-        
-        # Get all documents
-        all_docs = rag_service.list_documents_by_category()
-        
-        if hasattr(all_docs, 'objects') and all_docs.objects:
-            print(f"📊 Found {len(all_docs.objects)} documents in the vector database:")
-            print("-" * 50)
-            
-            for i, doc in enumerate(all_docs.objects, 1):
-                props = doc.properties
-                print(f"\n📄 Document {i}:")
-                print(f"   ID: {props.get('document_id', 'N/A')}")
-                print(f"   Category: {props.get('category', 'N/A')}")
-                print(f"   Source: {props.get('source', 'N/A')}")
-                print(f"   Chunk Index: {props.get('chunk_index', 'N/A')}")
-                print(f"   Content Preview: {props.get('content', '')[:100]}...")
-        else:
-            print("📭 No documents found in the vector database.")
-            
-    except Exception as e:
-        print(f"❌ Error checking vector database: {e}")
+# One-off search for Flatland keywords
+keywords = [r"circle", r"polygon", r"class"]
+filename = "Flatland By Edwin A. Abbott.txt"
+results = keyword_search(keywords, filename)
 
-def main():
-    """Main function to check the vector database."""
-    print("🔍 AI Chatbot - Vector Database Check Utility")
-    print("=" * 50)
-    
-    check_vector_database()
-    print("\n✅ Vector database check completed!")
+if results:
+    print(f"\n🔎 Found {len(results)} matching chunks in '{filename}':\n" + "-"*60)
+    for idx, (chunk_idx, content) in enumerate(results, 1):
+        print(f"\nChunk {chunk_idx}:\n{content[:500]}\n{'-'*40}")
+else:
+    print(f"\nNo matching chunks found in '{filename}'.")
 
-if __name__ == "__main__":
-    main() 
+# --- Cody and Scott keyword search ---
+cody_keywords = [r"Cody", r"Scott"]
+cody_filename = "Cody-and-Scott-Coding-Adventures-at-FCIAS.txt"
+cody_results = keyword_search(cody_keywords, cody_filename)
+
+if cody_results:
+    print(f"\n🔎 Found {len(cody_results)} matching chunks in '{cody_filename}':\n" + "-"*60)
+    for idx, (chunk_idx, content) in enumerate(cody_results, 1):
+        print(f"\nChunk {chunk_idx}:\n{content[:500]}\n{'-'*40}")
+else:
+    print(f"\nNo matching chunks found in '{cody_filename}'.")
+
+try:
+    docs = client.collections.get("Documents")
+    results = docs.query.fetch_objects(limit=5)
+    if hasattr(results, 'objects') and results.objects:
+        print(f"\n📊 Found {len(results.objects)} documents in the vector database:")
+        print("-" * 50)
+        for i, obj in enumerate(results.objects, 1):
+            props = obj.properties
+            print(f"\n📄 Document {i}:")
+            for k, v in props.items():
+                print(f"   {k}: {v}")
+    else:
+        print("\n📭 No documents found in the vector database.")
+except Exception as e:
+    print(f"❌ Error checking vector database: {e}")
+
+# --- Direct vector search for RAG debugging ---
+try:
+    from sentence_transformers import SentenceTransformer
+    model = SentenceTransformer("intfloat/e5-large")
+    query = "Cody and Scott at FCIAS"
+    query_embedding = model.encode(query).tolist()
+    docs = client.collections.get("Documents")
+    # Fetch more results and print scores if available
+    results = docs.query.near_vector(near_vector=query_embedding, limit=10, return_metadata=["distance"])
+    print(f"\n🔎 Top 10 vector search results for query: '{query}'\n{'-'*60}")
+    if hasattr(results, 'objects') and results.objects:
+        for i, obj in enumerate(results.objects, 1):
+            props = obj.properties
+            content = props.get("content", "")
+            filename = props.get("filename", "")
+            # Try to get distance/score if available
+            score = getattr(obj, 'distance', None) or getattr(obj, 'score', None) or getattr(obj, 'similarity', None)
+            print(f"Result {i} (filename: {filename}, score: {score}):\n{content[:500]}\n{'-'*40}")
+    else:
+        print("No results found for direct vector search.")
+except Exception as e:
+    print(f"[DEBUG] Error running direct vector search: {e}")
+
+# --- Check if vectors are actually stored ---
+print(f"\n🔍 Checking if vectors are stored in collection...")
+try:
+    docs = client.collections.get("Documents")
+    # Fetch all objects to see if they have vectors
+    all_objects = docs.query.fetch_objects(limit=10)
+    if hasattr(all_objects, 'objects') and all_objects.objects:
+        print(f"Found {len(all_objects.objects)} objects in collection")
+        for i, obj in enumerate(all_objects.objects[:3]):  # Check first 3
+            print(f"Object {i}: has vector = {hasattr(obj, 'vector') and obj.vector is not None}")
+            if hasattr(obj, 'vector') and obj.vector is not None:
+                print(f"  Vector length: {len(obj.vector)}")
+            else:
+                print(f"  No vector found")
+    else:
+        print("No objects found in collection")
+except Exception as e:
+    print(f"Error checking vectors: {e}") 

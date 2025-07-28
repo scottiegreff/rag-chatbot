@@ -10,28 +10,31 @@ import sys
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+import weaviate
+from weaviate.connect import ConnectionParams
+import uuid
+from datetime import datetime
 
 # Load environment variables
 load_dotenv()
 
-# Add the parent directory to the Python path
-sys.path.append(str(Path(__file__).parent.parent.parent))
+WEAVIATE_URL = os.getenv("WEAVIATE_URL", "http://localhost:8080")
+client = weaviate.WeaviateClient(ConnectionParams.from_url(WEAVIATE_URL, grpc_port=50051))
+client.connect()
 
-from backend.services.rag_service import RAGService
-import uuid
-
-# --- Configurable chunking parameters from environment ---
 CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "500"))  # characters
 OVERLAP = int(os.getenv("OVERLAP", "50"))         # characters
 
+def chunk_text(text, chunk_size=500, overlap=50):
+    chunks = []
+    i = 0
+    while i < len(text):
+        chunks.append(text[i:i+chunk_size])
+        i += chunk_size - overlap
+    return chunks
 
 def add_sample_documents():
-    """Add sample documents to the vector store."""
-    
-    # Initialize RAG service
-    rag_service = RAGService()
-    
-    # Sample documents
+    """Add sample documents to the vector store using v4 client."""
     documents = [
         {
             "id": "weaviate_intro",
@@ -39,7 +42,7 @@ def add_sample_documents():
             "metadata": {"source": "weaviate_documentation", "category": "vector_database"}
         },
         {
-            "id": "rag_explanation", 
+            "id": "rag_explanation",
             "text": "Retrieval-Augmented Generation (RAG) combines the power of large language models with external knowledge retrieval to provide more accurate and contextual responses.",
             "metadata": {"source": "ai_research", "category": "ai_concepts"}
         },
@@ -49,30 +52,36 @@ def add_sample_documents():
             "metadata": {"source": "python_docs", "category": "web_framework"}
         }
     ]
-    
-    # Add documents
+    docs = client.collections.get("Documents")
     for doc in documents:
-        try:
-            rag_service.add_document(
-                document_id=doc["id"],
-                text=doc["text"],
-                metadata=doc["metadata"]
-            )
-            print(f"✅ Added document: {doc['id']}")
-        except Exception as e:
-            print(f"❌ Failed to add document {doc['id']}: {e}")
-    
+        text = doc["text"]
+        metadata = doc["metadata"]
+        document_id = doc["id"]
+        chunks = chunk_text(text, chunk_size=CHUNK_SIZE, overlap=OVERLAP)
+        for idx, chunk in enumerate(chunks):
+            props = dict(metadata)
+            props["content"] = chunk
+            props["chunk_index"] = idx
+            props["document_id"] = document_id
+            props["upload_date"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.") + f"{datetime.now().microsecond // 1000:03d}Z"
+            docs.data.insert(properties=props)
+        print(f"✅ Added document: {document_id} as {len(chunks)} chunk(s)")
     print("🎉 Document addition complete!")
 
-
 def add_custom_document(text: str, source: str, category: str = "custom"):
-    """Add a custom document to the vector database"""
-    rag_service = RAGService()
+    """Add a custom document to the vector database using v4 client."""
+    docs = client.collections.get("Documents")
     doc_id = f"doc_{uuid.uuid4().hex[:8]}"
     metadata = {"source": source, "category": category}
-    
-    rag_service.add_document(doc_id, text, metadata)
-    print(f"Added custom document: {source}")
+    chunks = chunk_text(text, chunk_size=CHUNK_SIZE, overlap=OVERLAP)
+    for idx, chunk in enumerate(chunks):
+        props = dict(metadata)
+        props["content"] = chunk
+        props["chunk_index"] = idx
+        props["document_id"] = doc_id
+        props["upload_date"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.") + f"{datetime.now().microsecond // 1000:03d}Z"
+        docs.data.insert(properties=props)
+    print(f"Added custom document: {source} as {len(chunks)} chunk(s)")
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
