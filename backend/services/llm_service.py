@@ -48,15 +48,38 @@ class LLMService:
         else:
             logger.error(f"Unknown LLM_PROVIDER: {self.provider}")
             raise ValueError(f"Unknown LLM_PROVIDER: {self.provider}")
+
+    async def generate_streaming_response(self, prompt, history=None, system_instruction=None, **kwargs):
+        """Generate streaming response (fallback to non-streaming for OpenAI)"""
+        logger.info(f"[LLMService] Generating streaming response with provider: {self.provider}")
+        if self.provider == "openai":
+            # For OpenAI, use non-streaming and yield the response
+            response = self.generate_response(
+                prompt=prompt,
+                context=system_instruction,
+                history=history
+            )
+            # Yield the response as a single token for compatibility
+            yield response
+        else:
+            # Place your local streaming implementation here
+            yield "[Local streaming LLM not implemented in this patch]"
         self._initialized = True
 
-    def generate_response(self, prompt, context=None, **kwargs):
+    def generate_response(self, prompt, context=None, history=None, **kwargs):
         logger.info(f"[LLMService] Generating response with provider: {self.provider}")
         if self.provider == "openai":
             # Use OpenAI v1.x API (see: https://github.com/openai/openai-python/discussions/742)
             messages = []
             if context:
                 messages.append({"role": "system", "content": context})
+            
+            # Add chat history if provided
+            if history:
+                for msg in history:
+                    if msg.get('role') in ['user', 'assistant'] and msg.get('content'):
+                        messages.append({"role": msg['role'], "content": msg['content']})
+            
             messages.append({"role": "user", "content": prompt})
             try:
                 response = openai.chat.completions.create(

@@ -18,6 +18,7 @@ from backend.database import get_db
 from backend.models.chat import ChatSession, ChatMessage
 from backend.services.llm_service import LLMService
 from backend.services.rag_service import RAGService
+from backend.services.langchain_sql_service import langchain_sql_service
 
 # Define request and response models using Pydantic
 from pydantic import BaseModel
@@ -375,7 +376,9 @@ async def stream_chat_post(request: MessageRequest, bypass_rag: bool = False, db
     context = ""
     rag_duration = 0
     db_results = db_result.get('database_results') if db_result else None
-    has_successful_db_query = db_results and db_results.get('success')
+    has_successful_db_query = db_results and db_results.get('success') and len(db_results.get('sql_query', '').strip()) > 0
+    
+    logger.info(f"🔍 DEBUG: bypass_rag={bypass_rag}, has_successful_db_query={has_successful_db_query}")
     
     if not bypass_rag and not has_successful_db_query:
         rag_start_time = time.time()
@@ -384,14 +387,18 @@ async def stream_chat_post(request: MessageRequest, bypass_rag: bool = False, db
         rag_duration = (rag_end_time - rag_start_time) * 1000
         
         # Log RAG usage
-        if context and "relevant context" in context:
+        if context and len(context.strip()) > 0:
             logger.info(f"🔍 [TIMING] RAG context retrieved in {rag_duration:.2f}ms - Context will be used in response")
+            logger.info(f"🔍 RAG context length: {len(context)} characters")
+            logger.info(f"🔍 RAG context preview: {context[:300]}...")
         else:
             logger.info(f"⚠️ [TIMING] No RAG context found in {rag_duration:.2f}ms - Response will be generated without document context")
     elif has_successful_db_query:
         logger.info(f"🗄️ Database query detected - skipping RAG context")
     else:
         logger.info("🚫 RAG context skipped (bypass mode)")
+    
+    logger.info(f"🔍 DEBUG: Final context length: {len(context)}")
     
     # Calculate pre-LLM processing time
     pre_llm_end_time = time.time()
@@ -409,11 +416,51 @@ async def stream_chat_post(request: MessageRequest, bypass_rag: bool = False, db
             
             # Determine the system instruction based on database query or RAG context
             instruction_start_time = time.time()
+            logger.info(f"🔍 DEBUG: System instruction selection - has_successful_db_query={has_successful_db_query}, context_length={len(context)}, has_system_instruction={bool(request.system_instruction)}")
+            
             if has_successful_db_query:
                 # Use database query result from LangChain SQL Agent
                 db_response = db_results.get('response', 'No response')
-                system_instruction = f"""
+                sql_query = db_results.get('sql_query', '')
+                
+                # Get database schema for context
+                db_info = langchain_sql_service.get_database_info()
+                db_schema = ""
+                if 'schema' in db_info and not 'error' in db_info:
+                    db_schema = db_info['schema']
+                
+                # Log what we're using for the response
+                logger.info(f"🗄️ Using database response: {db_response[:100]}...")
+                logger.info(f"🗄️ SQL query: {sql_query[:100]}...")
+                logger.info(f"🗄️ Database schema length: {len(db_schema)} characters")
+                
+                # Include SQL query in the response if available
+                if sql_query:
+                    system_instruction = f"""
 You are a helpful assistant with access to an e-commerce database.
+
+Database Schema:
+{db_schema}
+
+Database Query Result:
+{db_response}
+
+SQL Query Used:
+```sql
+{sql_query}
+```
+
+IMPORTANT: If the Database Query Result contains a table with "**Query Results:**", preserve that table format exactly as it appears. Do not convert the table to natural language text.
+
+Respond naturally based on the database information above. Use the exact numbers from the database result. 
+Always include the SQL query in your response so the user can see what query was executed.
+"""
+                else:
+                    system_instruction = f"""
+You are a helpful assistant with access to an e-commerce database.
+
+Database Schema:
+{db_schema}
 
 Database Query Result:
 {db_response}
@@ -425,12 +472,18 @@ Respond naturally based on the database information above. Use the exact numbers
                 # Use custom system instruction if provided
                 system_instruction = request.system_instruction
                 logger.info("🔧 Using custom system instruction from request")
-            elif context and "relevant context" in context:
+            elif context and len(context.strip()) > 0:
                 # Combine RAG context with the optimized system instruction
-                system_instruction = f"{SYSTEM_INSTRUCTION}\n\n{context}"
+                system_instruction = f"{SYSTEM_INSTRUCTION}\n\n**RELEVANT CONTEXT FROM KNOWLEDGE BASE:**\n\n{context}\n\n**INSTRUCTIONS:** Use the above context to answer the user's question. If the context contains the specific information requested, use it directly. If not, acknowledge what you can and cannot answer based on the available context."
+                logger.info(f"🔍 Using RAG context in system instruction. Context length: {len(context)}")
+                logger.info(f"🔍 RAG context preview: {context[:200]}...")
+                logger.info(f"🔍 Final system instruction length: {len(system_instruction)}")
+                logger.info(f"🔍 System instruction preview: {system_instruction[-500:]}...")
             else:
                 # Use base system instruction when no RAG context is available
                 system_instruction = SYSTEM_INSTRUCTION
+                logger.info("⚠️ No RAG context available - using base system instruction")
+                logger.info(f"🔍 DEBUG: context='{context}', context.strip()='{context.strip()}', len(context.strip())={len(context.strip())}")
             
             instruction_end_time = time.time()
             instruction_duration = (instruction_end_time - instruction_start_time) * 1000
@@ -446,7 +499,8 @@ Respond naturally based on the database information above. Use the exact numbers
                 # Non-streaming for OpenAI
                 response = llm_service.generate_response(
                     prompt=request.message,
-                    context=system_instruction
+                    context=system_instruction,
+                    history=history[:-1] if history else None  # Exclude the latest message
                 )
                 await save_message(session.id, "assistant", response, db)
                 session.updated_at = datetime.utcnow()

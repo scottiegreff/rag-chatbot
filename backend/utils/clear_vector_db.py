@@ -7,7 +7,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from services.rag_service import RAGService
+from backend.services.rag_service import RAGService
 import logging
 
 # Set up logging
