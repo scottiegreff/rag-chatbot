@@ -537,8 +537,10 @@ function clearChat(keepSystemMessages = true) {
         chatMessages.innerHTML = '';
         systemMessages.forEach(msg => chatMessages.appendChild(msg));
     } else {
-        // Clear all messages
+        // Clear all messages completely
         chatMessages.innerHTML = '';
+        // Also clear any potential static content that might be added back
+        chatMessages.textContent = '';
     }
 }
 
@@ -672,13 +674,16 @@ async function createNewSession() {
             currentSession = newSession;
             sessionId = newSession.session_id;
 
-            // Clear chat and update UI
-            clearChat();
+            // Clear chat and update UI - completely clear all content
+            chatMessages.innerHTML = '';
+            chatMessages.textContent = '';
             renderSessionsList();
 
-            // Auto-expand sidebar on mobile
+            // Close sidebar on both mobile and desktop
             if (window.innerWidth <= 768) {
                 AppState.setSidebarOpen(false);
+            } else {
+                AppState.setSidebarCollapsed(true);
             }
         }
     } catch (error) {
@@ -701,7 +706,9 @@ async function deleteSession(targetSessionId) {
             if (currentSession && currentSession.session_id === targetSessionId) {
                 currentSession = null;
                 sessionId = null;
-                clearChat();
+                // Completely clear all content
+                chatMessages.innerHTML = '';
+                chatMessages.textContent = '';
             }
 
             // Update UI
@@ -920,8 +927,7 @@ function setupEventListeners() {
     if (newChatBtn) {
         newChatBtn.addEventListener('click', () => {
             createNewSession();
-            // Close sidebar after creating new session
-            AppState.setSidebarOpen(false);
+            // Close sidebar after creating new session (handled in createNewSession)
         });
     }
 
